@@ -1,0 +1,11 @@
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+lto = true
+opt-level = 3
+
+[workspace]
+members = [
+  "channel-loader",
+]
