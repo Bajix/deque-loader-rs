@@ -1,8 +1,10 @@
+use crate::deferral_token::DeferralToken;
 use crate::reactor::{ReactorSignal, RequestReactor};
 use crate::request::Request;
 use crate::Key;
 use atomic_take::AtomicTake;
 use flume::{self, Sender};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -47,6 +49,7 @@ where
     &self,
     key: K,
     timing: LoadTiming,
+    deferral_token: Option<&DeferralToken>,
   ) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
@@ -54,9 +57,21 @@ where
   {
     let (req, rx) = Request::new(key);
 
-    let signal = ReactorSignal::Load(req, timing);
+    if let Some(token) = deferral_token {
+      token.enter_deferral_span(Box::new(|deferral_map| {
+        let type_id = TypeId::of::<DataLoader<K, T>>();
 
-    self.tx.send(signal).ok();
+        let deferral_active = deferral_map
+          .get(&type_id)
+          .expect("Missing DeferralCoordinator for DataLoader. see attach_loader macro for usage");
+
+        if deferral_active.compare_exchange(false, true).is_ok() {
+          self.tx.send(ReactorSignal::EnterDeferralSpan).ok();
+        }
+      }));
+    }
+
+    self.tx.send(ReactorSignal::Load(req, timing)).ok();
 
     rx
   }

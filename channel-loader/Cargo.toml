@@ -2,7 +2,7 @@
 authors = ["Thomas Sieverding <Thomas@bajix.com>"]
 edition = "2018"
 name = "channel-loader"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 description = "A channel based solution designed for efficient data loading"
 readme = "README.md"
 license = "MIT"
@@ -12,6 +12,9 @@ repository = "https://github.com/Bajix/channel-loader-rs/"
 async-trait = "0.1.50"
 atomic-take = "1.0.0"
 booter = "1.0.0"
+crossbeam = "0.8.0"
 flume = "0.10.5"
+fnv = "1.0.7"
+inventory = "0.1.10"
 static_init = "1.0.1"
-tokio = { version = "1.5.0", features = ["rt", "sync", "time", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }

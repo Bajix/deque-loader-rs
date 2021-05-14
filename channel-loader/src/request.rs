@@ -2,7 +2,6 @@ use crate::key::Key;
 use crate::loader::Loader;
 use std::collections::HashMap;
 use tokio::sync::oneshot;
-
 pub(crate) struct Request<K: Key, T: Loader<K>> {
   pub(crate) key: K,
   tx: oneshot::Sender<Result<Option<T::Value>, T::Error>>,
@@ -22,7 +21,7 @@ impl<K: Key, T: Loader<K>> Request<K, T> {
     (request, rx)
   }
 
-  fn resolve(self: Self, value: Result<Option<T::Value>, T::Error>) {
+  fn resolve(self, value: Result<Option<T::Value>, T::Error>) {
     self.tx.send(value).ok();
   }
 }

@@ -39,10 +39,7 @@ impl ReactorState {
   }
 
   fn is_loading_deferred(&self) -> bool {
-    match self {
-      ReactorState::Collecting(_) => true,
-      _ => false,
-    }
+    matches!(self, ReactorState::Collecting(_))
   }
 }
 
@@ -71,13 +68,13 @@ where
   }
 
   // Cooperatively process incoming requests until receiver disconnected
-  pub(crate) fn start_detached(self: Self) {
+  pub(crate) fn start_detached(self) {
     tokio::task::spawn(async move {
       self.start_event_loop().await;
     });
   }
 
-  async fn start_event_loop(mut self: Self) {
+  async fn start_event_loop(mut self) {
     while !self.rx.is_disconnected() {
       let signal = match &self.state {
         ReactorState::Idle => self.rx.recv_async().await.ok(),
@@ -130,7 +127,7 @@ where
     }
   }
 
-  fn process_pending_requests(self: &mut Self) {
+  fn process_pending_requests(&mut self) {
     let mut requests: Vec<Request<K, T>> = Vec::with_capacity(T::MAX_BATCH_SIZE);
     std::mem::swap(&mut self.requests, &mut requests);
     requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
