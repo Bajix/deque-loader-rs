@@ -91,35 +91,28 @@ mod tests {
   use std::{collections::HashMap, iter};
 
   #[derive(Default)]
-  pub struct LoremLoader {}
+  pub struct BatchLoader {}
 
-  #[derive(Clone)]
-  pub struct Ipsum {
-    pub content: String,
-  }
-
-  impl Default for Ipsum {
-    fn default() -> Self {
-      Ipsum {
-        content: String::from("Lorem ipsum dolor sit amet"),
-      }
-    }
-  }
+  #[derive(Clone, Debug, PartialEq, Eq)]
+  pub struct BatchSize(usize);
 
   #[async_trait::async_trait]
-  impl Loader<i32> for LoremLoader {
-    type Value = Ipsum;
+  impl Loader<i32> for BatchLoader {
+    type Value = BatchSize;
     type Error = ();
 
     async fn handle_task(
       &self,
-      task: LoadTask<TaskStealer<i32, LoremLoader>>,
-    ) -> LoadTask<CompletionReceipt<i32, LoremLoader>> {
+      task: LoadTask<TaskStealer<i32, BatchLoader>>,
+    ) -> LoadTask<CompletionReceipt<i32, BatchLoader>> {
       match task.get_assignment() {
         TaskAssignment::LoadBatch(task) => {
-          let mut data: HashMap<i32, Ipsum> = HashMap::new();
+          let mut data: HashMap<i32, BatchSize> = HashMap::new();
+          let keys = task.keys();
 
-          data.extend(task.keys().into_iter().zip(iter::repeat(Ipsum::default())));
+          println!("keys: {:?}", &keys);
+
+          data.extend(task.keys().into_iter().zip(iter::repeat(BatchSize(keys.len()))));
 
           task.resolve(Ok(data))
         }
@@ -128,14 +121,14 @@ mod tests {
     }
   }
 
-  attach_loader!(Ipsum, LoremLoader, i32);
+  attach_loader!(BatchSize, BatchLoader, i32);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {
     booter::boot();
 
-    let data = Ipsum::load_by(
-      10_i32,
+    let data = BatchSize::load_by(
+      1_i32,
       LoadOptions {
         timing: LoadTiming::Immediate,
         deferral_token: None,
@@ -150,11 +143,39 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn it_auto_batches() -> Result<(), ()> {
+    booter::boot();
+
+    let a = BatchSize::load_by(
+      2_i32,
+      LoadOptions {
+        timing: LoadTiming::Immediate,
+        deferral_token: None,
+      },
+    );
+
+    let _b = BatchSize::load_by(3_i32, LoadOptions {
+      timing: LoadTiming::Immediate,
+      deferral_token: None
+    });
+
+    let data = a.await.unwrap()?;
+
+    if let Some(BatchSize(n)) = data {
+      assert!(n.ge(&2));
+    } else {
+      panic!("Request failed to batch");
+    }
+
+    Ok(())
+  }
+
+  #[tokio::test]
   async fn it_deadline_loads() -> Result<(), ()> {
     booter::boot();
 
-    let data = Ipsum::load_by(
-      10_i32,
+    let data = BatchSize::load_by(
+      4_i32,
       LoadOptions {
         timing: LoadTiming::Deadline,
         deferral_token: None,
@@ -174,8 +195,8 @@ mod tests {
 
     let deferral_token = DeferralToken::default();
 
-    let receiver = Ipsum::load_by(
-      10_i32,
+    let receiver = BatchSize::load_by(
+      5_i32,
       LoadOptions {
         timing: LoadTiming::Immediate,
         deferral_token: Some(&deferral_token),

@@ -19,6 +19,7 @@ enum ReactorState {
   Collecting(i32),
   AwaitingDeadline(Instant),
   Draining,
+  Yielding,
 }
 
 impl ReactorState {
@@ -95,6 +96,7 @@ where
           }
         }
         ReactorState::Draining => self.rx.try_recv().ok(),
+        ReactorState::Yielding => self.rx.try_recv().ok(),
       };
 
       match signal {
@@ -126,9 +128,15 @@ where
           }
         }
         None => {
-          if self.scheduled_capacity.load().is_negative() {
-            self.spawn_loader();
+          if matches!(&self.state, &ReactorState::Yielding) {
             self.state = ReactorState::Idle;
+
+            if self.scheduled_capacity.load().is_negative() {
+              self.spawn_loader();
+            }
+          } else {
+            self.state = ReactorState::Yielding;
+            tokio::task::yield_now().await;
           }
         }
       }
