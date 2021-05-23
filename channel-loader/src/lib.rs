@@ -20,4 +20,4 @@ pub mod task;
 pub use deferral_token::DeferralToken;
 pub use key::Key;
 pub use loadable::Loadable;
-pub use loader::{LoadTiming, Loader};
+pub use loader::{LoadOptions, LoadTiming, Loader};

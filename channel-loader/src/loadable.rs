@@ -1,15 +1,13 @@
 use crate::{
-  deferral_token::DeferralToken,
   key::Key,
-  loader::{LoadTiming, Loader},
+  loader::{LoadOptions, Loader},
 };
 use tokio::sync::oneshot;
 
 pub trait Loadable<K: Key, T: Loader<K>> {
-  fn load_by(
+  fn load_by<'a>(
     key: K,
-    timing: LoadTiming,
-    deferral_token: Option<&DeferralToken>,
+    otions: LoadOptions<'a>,
   ) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
@@ -26,7 +24,7 @@ macro_rules! attach_loader {
       crossbeam::atomic::AtomicCell,
       deferral_token::{DeferralCoordinator, DeferralToken},
       loadable::Loadable,
-      loader::{DataLoader, StaticLoaderExt},
+      loader::{DataLoader, LoadOptions, StaticLoaderExt},
       reactor::ReactorSignal,
       static_init,
     };
@@ -41,18 +39,14 @@ macro_rules! attach_loader {
     }
 
     impl Loadable<$key, $loader> for $loadable {
-      fn load_by(
+      fn load_by<'a>(
         key: $key,
-        timing: LoadTiming,
-        deferral_token: Option<&DeferralToken>,
+        options: LoadOptions<'a>,
       ) -> oneshot::Receiver<
         Result<Option<<$loader as Loader<$key>>::Value>, <$loader as Loader<$key>>::Error>,
       > {
-        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader().load_by(
-          key,
-          timing,
-          deferral_token,
-        )
+        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
+          .load_by(key, options)
       }
     }
 
@@ -140,9 +134,15 @@ mod tests {
   async fn it_loads() -> Result<(), ()> {
     booter::boot();
 
-    let data = Ipsum::load_by(10_i32, LoadTiming::Immediate, None)
-      .await
-      .unwrap()?;
+    let data = Ipsum::load_by(
+      10_i32,
+      LoadOptions {
+        timing: LoadTiming::Immediate,
+        deferral_token: None,
+      },
+    )
+    .await
+    .unwrap()?;
 
     assert!(data.is_some());
 
@@ -153,9 +153,15 @@ mod tests {
   async fn it_deadline_loads() -> Result<(), ()> {
     booter::boot();
 
-    let data = Ipsum::load_by(10_i32, LoadTiming::Deadline, None)
-      .await
-      .unwrap()?;
+    let data = Ipsum::load_by(
+      10_i32,
+      LoadOptions {
+        timing: LoadTiming::Deadline,
+        deferral_token: None,
+      },
+    )
+    .await
+    .unwrap()?;
 
     assert!(data.is_some());
 
@@ -168,7 +174,13 @@ mod tests {
 
     let deferral_token = DeferralToken::default();
 
-    let receiver = Ipsum::load_by(10_i32, LoadTiming::Immediate, Some(&deferral_token));
+    let receiver = Ipsum::load_by(
+      10_i32,
+      LoadOptions {
+        timing: LoadTiming::Immediate,
+        deferral_token: Some(&deferral_token),
+      },
+    );
 
     deferral_token.send_pending_requests();
 

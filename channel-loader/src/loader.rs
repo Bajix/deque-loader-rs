@@ -21,6 +21,20 @@ pub trait Loader<K: Key>: Default + Send + Sync {
     task: LoadTask<TaskStealer<K, Self>>,
   ) -> LoadTask<CompletionReceipt<K, Self>>;
 }
+
+pub struct LoadOptions<'a> {
+  pub timing: LoadTiming,
+  pub deferral_token: Option<&'a DeferralToken>,
+}
+
+impl Default for LoadOptions<'_> {
+  fn default() -> Self {
+    LoadOptions {
+      timing: LoadTiming::Immediate,
+      deferral_token: None,
+    }
+  }
+}
 pub enum LoadTiming {
   Immediate,
   Deadline,
@@ -48,16 +62,19 @@ where
     }
   }
 
-  pub fn load_by(
-    &self,
+  pub fn load_by<'a>(
+    &'a self,
     key: K,
-    timing: LoadTiming,
-    deferral_token: Option<&DeferralToken>,
+    params: LoadOptions<'a>,
   ) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
     T: Loader<K>,
   {
+    let LoadOptions {
+      timing,
+      deferral_token,
+    } = params;
     let (req, rx) = Request::new(key);
 
     if let Some(token) = deferral_token {
