@@ -4,4 +4,4 @@
 [![Cargo](https://img.shields.io/crates/v/channel-loader.svg)](https://crates.io/crates/channel-loader)
 [![Documentation](https://docs.rs/channel-loader/badge.svg)](https://docs.rs/channel-loader)
 
-WIP: Check back later for updates!
+WIP: Check back later for documentation and updates. If you have any insights on ways in which this can be improved upon, please post on github. Thanks!
