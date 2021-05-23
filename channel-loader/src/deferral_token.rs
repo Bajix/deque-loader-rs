@@ -2,8 +2,10 @@ use crossbeam::atomic::AtomicCell;
 use fnv::FnvHashMap;
 use std::any::TypeId;
 
+#[doc(hidden)]
 pub type DeferralMap = FnvHashMap<TypeId, AtomicCell<bool>>;
 
+#[doc(hidden)]
 pub struct DeferralCoordinator {
   build_fn: Box<dyn Fn(&mut DeferralMap)>,
   reset_fn: Box<dyn Fn(&DeferralMap)>,

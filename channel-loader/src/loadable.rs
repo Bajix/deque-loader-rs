@@ -1,8 +1,8 @@
-use crate::deferral_token::DeferralToken;
-use crate::key::Key;
-use crate::loader::{LoadTiming, Loader};
-use crate::reactor::ReactorSignal;
-use crossbeam::atomic::AtomicCell;
+use crate::{
+  deferral_token::DeferralToken,
+  key::Key,
+  loader::{LoadTiming, Loader},
+};
 use tokio::sync::oneshot;
 
 pub trait Loadable<K: Key, T: Loader<K>> {
@@ -23,14 +23,16 @@ macro_rules! attach_loader {
 
     use $crate::{
       booter,
+      crossbeam::atomic::AtomicCell,
       deferral_token::{DeferralCoordinator, DeferralToken},
       loadable::Loadable,
       loader::{DataLoader, StaticLoaderExt},
+      reactor::ReactorSignal,
       static_init,
     };
 
     #[static_init::dynamic(0)]
-    static mut LOADER: DataLoader<$key, $loader> = DataLoader::new(<$loader>::default());
+    static mut LOADER: DataLoader<$key, $loader> = DataLoader::new();
 
     impl StaticLoaderExt<$key, $loader> for DataLoader<$key, $loader> {
       fn loader() -> &'static DataLoader<$key, $loader> {
@@ -85,11 +87,14 @@ macro_rules! attach_loader {
   };
 }
 
+#[cfg(test)]
 mod tests {
   use super::*;
-  use crate::loader::LoadTiming;
-  use std::collections::HashMap;
-  use std::iter;
+  use crate::{
+    loader::LoadTiming,
+    task::{CompletionReceipt, LoadTask, TaskAssignment, TaskStealer},
+  };
+  use std::{collections::HashMap, iter};
 
   #[derive(Default)]
   pub struct LoremLoader {}
@@ -112,12 +117,20 @@ mod tests {
     type Value = Ipsum;
     type Error = ();
 
-    async fn load(&self, ids: Vec<i32>) -> Result<HashMap<i32, Self::Value>, Self::Error> {
-      let mut data: HashMap<i32, Ipsum> = HashMap::new();
+    async fn handle_task(
+      &self,
+      task: LoadTask<TaskStealer<i32, LoremLoader>>,
+    ) -> LoadTask<CompletionReceipt<i32, LoremLoader>> {
+      match task.get_assignment() {
+        TaskAssignment::LoadBatch(task) => {
+          let mut data: HashMap<i32, Ipsum> = HashMap::new();
 
-      data.extend(ids.into_iter().zip(iter::repeat(Ipsum::default())));
+          data.extend(task.keys().into_iter().zip(iter::repeat(Ipsum::default())));
 
-      Ok(data)
+          task.resolve(Ok(data))
+        }
+        TaskAssignment::NoAssignment(receipt) => receipt,
+      }
     }
   }
 

@@ -1,23 +1,26 @@
-use crate::deferral_token::DeferralToken;
-use crate::reactor::{ReactorSignal, RequestReactor};
-use crate::request::Request;
-use crate::Key;
+use crate::{
+  deferral_token::DeferralToken,
+  key::Key,
+  reactor::{ReactorSignal, RequestReactor},
+  request::Request,
+  task::{CompletionReceipt, LoadTask, TaskStealer},
+};
 use atomic_take::AtomicTake;
 use flume::{self, Sender};
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{any::TypeId, time::Duration};
 use tokio::sync::oneshot;
 
 #[async_trait::async_trait]
-pub trait Loader<K: Key>: Default + Send + Sync + 'static {
+pub trait Loader<K: Key>: Default + Send + Sync {
   type Value: Send + Clone + 'static;
   type Error: Send + Clone + 'static;
-  const MAX_DELAY: Duration = Duration::from_millis(3);
-  const MAX_BATCH_SIZE: usize = 100;
-  async fn load(&self, keys: Vec<K>) -> Result<HashMap<K, Self::Value>, Self::Error>;
+  const MAX_DELAY: Duration = Duration::from_millis(10);
+  const MAX_BATCH_SIZE: i32 = 100;
+  async fn handle_task(
+    &self,
+    task: LoadTask<TaskStealer<K, Self>>,
+  ) -> LoadTask<CompletionReceipt<K, Self>>;
 }
-
 pub enum LoadTiming {
   Immediate,
   Deadline,
@@ -32,9 +35,9 @@ where
   K: Key,
   T: Loader<K>,
 {
-  pub fn new(loader: T) -> Self {
+  pub fn new() -> Self {
     let (tx, rx) = flume::unbounded::<ReactorSignal<K, T>>();
-    let reactor = AtomicTake::new(RequestReactor::new(rx, loader));
+    let reactor = AtomicTake::new(RequestReactor::new(rx));
     Self { tx, reactor }
   }
 

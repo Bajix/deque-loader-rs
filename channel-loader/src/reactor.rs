@@ -1,10 +1,13 @@
-use crate::key::Key;
-use crate::loader::{LoadTiming, Loader};
-use crate::request::{Request, ResolverExt};
+use crate::{
+  key::Key,
+  loader::{LoadTiming, Loader},
+  request::Request,
+  task::{LoadTask, TaskStealer},
+};
+use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
 use std::sync::Arc;
-use tokio::time::timeout_at;
-use tokio::time::Instant;
+use tokio::time::{timeout_at, Instant};
 
 pub(crate) enum ReactorSignal<K: Key, T: Loader<K> + 'static> {
   Load(Request<K, T>, LoadTiming),
@@ -45,9 +48,10 @@ impl ReactorState {
 
 pub(crate) struct RequestReactor<K: Key, T: Loader<K> + 'static> {
   rx: Receiver<ReactorSignal<K, T>>,
-  loader: Arc<T>,
+  loader: Option<Arc<T>>,
   state: ReactorState,
-  requests: Vec<Request<K, T>>,
+  pub(crate) queue: Worker<Request<K, T>>,
+  pub(crate) scheduled_capacity: Arc<AtomicCell<i32>>,
 }
 
 impl<K, T> RequestReactor<K, T>
@@ -55,15 +59,13 @@ where
   K: Key,
   T: Loader<K>,
 {
-  pub(crate) fn new(rx: Receiver<ReactorSignal<K, T>>, loader: T) -> Self {
-    let loader = Arc::new(loader);
-    let requests: Vec<Request<K, T>> = Vec::with_capacity(T::MAX_BATCH_SIZE);
-
+  pub(crate) fn new(rx: Receiver<ReactorSignal<K, T>>) -> Self {
     RequestReactor {
       rx,
-      loader,
+      loader: None,
       state: ReactorState::Idle,
-      requests,
+      queue: Worker::new_fifo(),
+      scheduled_capacity: Arc::new(AtomicCell::new(0)),
     }
   }
 
@@ -75,6 +77,8 @@ where
   }
 
   async fn start_event_loop(mut self) {
+    self.loader = Some(Arc::new(T::default()));
+
     while !self.rx.is_disconnected() {
       let signal = match &self.state {
         ReactorState::Idle => self.rx.recv_async().await.ok(),
@@ -97,10 +101,14 @@ where
         Some(ReactorSignal::EnterDeferralSpan) => self.state.enter_deferral_span(),
         Some(ReactorSignal::ExitDeferralSpan) => self.state.exit_deferral_span(),
         Some(ReactorSignal::Load(request, timing)) => {
-          self.requests.push(request);
+          self.queue.push(request);
 
-          if self.requests.capacity().eq(&0_usize) {
-            self.process_pending_requests();
+          if self
+            .scheduled_capacity
+            .fetch_sub(1)
+            .lt(&T::MAX_BATCH_SIZE.saturating_neg())
+          {
+            self.spawn_loader();
           } else {
             match (&self.state, &timing) {
               (&ReactorState::Idle, &LoadTiming::Immediate) => {
@@ -118,8 +126,8 @@ where
           }
         }
         None => {
-          if !self.requests.is_empty() {
-            self.process_pending_requests();
+          if self.scheduled_capacity.load().is_negative() {
+            self.spawn_loader();
             self.state = ReactorState::Idle;
           }
         }
@@ -127,18 +135,15 @@ where
     }
   }
 
-  fn process_pending_requests(&mut self) {
-    let mut requests: Vec<Request<K, T>> = Vec::with_capacity(T::MAX_BATCH_SIZE);
-    std::mem::swap(&mut self.requests, &mut requests);
-    requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
-    let mut keys: Vec<K> = requests.iter().map(|req| req.key.to_owned()).collect();
+  fn spawn_loader(&mut self) {
+    let load_task: LoadTask<TaskStealer<K, T>> = LoadTask::fork_from_reactor(&self);
 
-    keys.dedup();
+    if let Some(loader) = &self.loader {
+      let loader = loader.clone();
 
-    let loader = self.loader.clone();
-
-    tokio::task::spawn(async move {
-      requests.resolve(loader.load(keys).await);
-    });
+      tokio::task::spawn(async move {
+        loader.handle_task(load_task).await;
+      });
+    }
   }
 }
