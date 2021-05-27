@@ -5,13 +5,13 @@ use crossbeam::{
 };
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-pub struct LoadTask<T>(T);
+pub struct Task<T>(T);
 
-pub struct TaskStealer<K: Key, T: Loader<K>> {
+pub struct PendingAssignment<K: Key, T: Loader<K>> {
   reactor_capacity: Arc<AtomicCell<i32>>,
   stealer: Stealer<Request<K, T>>,
 }
-pub struct TaskBatch<K: Key, T: Loader<K>> {
+pub struct LoadBatch<K: Key, T: Loader<K>> {
   requests: Vec<Request<K, T>>,
 }
 pub struct CompletionReceipt<K: Key, T: Loader<K>> {
@@ -19,11 +19,11 @@ pub struct CompletionReceipt<K: Key, T: Loader<K>> {
   loader: PhantomData<T>,
 }
 pub enum TaskAssignment<K: Key, T: Loader<K>> {
-  LoadBatch(LoadTask<TaskBatch<K, T>>),
-  NoAssignment(LoadTask<CompletionReceipt<K, T>>),
+  LoadBatch(Task<LoadBatch<K, T>>),
+  NoAssignment(Task<CompletionReceipt<K, T>>),
 }
 
-impl<K, T> LoadTask<TaskStealer<K, T>>
+impl<K, T> Task<PendingAssignment<K, T>>
 where
   K: Key,
   T: Loader<K>,
@@ -35,7 +35,7 @@ where
 
     reactor_capacity.fetch_add(T::MAX_BATCH_SIZE);
 
-    LoadTask(TaskStealer {
+    Task(PendingAssignment {
       reactor_capacity,
       stealer,
     })
@@ -43,7 +43,7 @@ where
 
   #[must_use]
   pub fn get_assignment(self) -> TaskAssignment<K, T> {
-    let LoadTask(TaskStealer {
+    let Task(PendingAssignment {
       reactor_capacity,
       stealer,
     }) = self;
@@ -74,20 +74,20 @@ where
     if requests.len().gt(&0) {
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
 
-      TaskAssignment::LoadBatch(LoadTask::from_requests(requests))
+      TaskAssignment::LoadBatch(Task::from_requests(requests))
     } else {
-      TaskAssignment::NoAssignment(LoadTask::resolve_receipt())
+      TaskAssignment::NoAssignment(Task::resolve_receipt())
     }
   }
 }
 
-impl<K, T> LoadTask<TaskBatch<K, T>>
+impl<K, T> Task<LoadBatch<K, T>>
 where
   K: Key,
   T: Loader<K>,
 {
   fn from_requests(requests: Vec<Request<K, T>>) -> Self {
-    LoadTask(TaskBatch { requests })
+    Task(LoadBatch { requests })
   }
 
   pub fn keys(&self) -> Vec<K> {
@@ -107,8 +107,8 @@ where
   pub fn resolve(
     self,
     results: Result<HashMap<K, T::Value>, T::Error>,
-  ) -> LoadTask<CompletionReceipt<K, T>> {
-    let LoadTask(TaskBatch { requests }) = self;
+  ) -> Task<CompletionReceipt<K, T>> {
+    let Task(LoadBatch { requests }) = self;
 
     match results {
       Ok(mut values) => {
@@ -141,17 +141,17 @@ where
       }
     };
 
-    LoadTask::<CompletionReceipt<K, T>>::resolve_receipt()
+    Task::<CompletionReceipt<K, T>>::resolve_receipt()
   }
 }
 
-impl<K, T> LoadTask<CompletionReceipt<K, T>>
+impl<K, T> Task<CompletionReceipt<K, T>>
 where
   K: Key,
   T: Loader<K>,
 {
   fn resolve_receipt() -> Self {
-    LoadTask(CompletionReceipt {
+    Task(CompletionReceipt {
       key: PhantomData,
       loader: PhantomData,
     })

@@ -3,7 +3,7 @@ use crate::{
   key::Key,
   reactor::{ReactorSignal, RequestReactor},
   request::Request,
-  task::{CompletionReceipt, LoadTask, TaskStealer},
+  task::{CompletionReceipt, PendingAssignment, Task},
 };
 use atomic_take::AtomicTake;
 use flume::{self, Sender};
@@ -18,8 +18,8 @@ pub trait Loader<K: Key>: Default + Send + Sync {
   const MAX_BATCH_SIZE: i32 = 100;
   async fn handle_task(
     &self,
-    task: LoadTask<TaskStealer<K, Self>>,
-  ) -> LoadTask<CompletionReceipt<K, Self>>;
+    task: Task<PendingAssignment<K, Self>>,
+  ) -> Task<CompletionReceipt<K, Self>>;
 }
 
 pub struct LoadOptions<'a> {

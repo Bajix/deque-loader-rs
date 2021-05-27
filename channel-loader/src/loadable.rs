@@ -86,7 +86,7 @@ mod tests {
   use super::*;
   use crate::{
     loader::LoadTiming,
-    task::{CompletionReceipt, LoadTask, TaskAssignment, TaskStealer},
+    task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment},
   };
   use std::{collections::HashMap, iter};
 
@@ -103,8 +103,8 @@ mod tests {
 
     async fn handle_task(
       &self,
-      task: LoadTask<TaskStealer<i32, BatchLoader>>,
-    ) -> LoadTask<CompletionReceipt<i32, BatchLoader>> {
+      task: Task<PendingAssignment<i32, BatchLoader>>,
+    ) -> Task<CompletionReceipt<i32, BatchLoader>> {
       match task.get_assignment() {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, BatchSize> = HashMap::new();
@@ -112,7 +112,12 @@ mod tests {
 
           println!("keys: {:?}", &keys);
 
-          data.extend(task.keys().into_iter().zip(iter::repeat(BatchSize(keys.len()))));
+          data.extend(
+            task
+              .keys()
+              .into_iter()
+              .zip(iter::repeat(BatchSize(keys.len()))),
+          );
 
           task.resolve(Ok(data))
         }
@@ -154,10 +159,13 @@ mod tests {
       },
     );
 
-    let _b = BatchSize::load_by(3_i32, LoadOptions {
-      timing: LoadTiming::Immediate,
-      deferral_token: None
-    });
+    let _b = BatchSize::load_by(
+      3_i32,
+      LoadOptions {
+        timing: LoadTiming::Immediate,
+        deferral_token: None,
+      },
+    );
 
     let data = a.await.unwrap()?;
 

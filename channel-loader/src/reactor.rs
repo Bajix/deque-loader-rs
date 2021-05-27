@@ -2,7 +2,7 @@ use crate::{
   key::Key,
   loader::{LoadTiming, Loader},
   request::Request,
-  task::{LoadTask, TaskStealer},
+  task::{PendingAssignment, Task},
 };
 use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
@@ -144,7 +144,7 @@ where
   }
 
   fn spawn_loader(&mut self) {
-    let load_task: LoadTask<TaskStealer<K, T>> = LoadTask::fork_from_reactor(&self);
+    let load_task: Task<PendingAssignment<K, T>> = Task::fork_from_reactor(&self);
 
     if let Some(loader) = &self.loader {
       let loader = loader.clone();
