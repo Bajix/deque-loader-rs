@@ -2,23 +2,13 @@ use crate::{
   key::Key,
   reactor::{ReactorSignal, RequestReactor},
   request::Request,
-  task::{CompletionReceipt, PendingAssignment, Task},
+  worker::TaskHandler,
 };
 use atomic_take::AtomicTake;
 use flume::{self, Sender};
 use tokio::sync::oneshot;
 
-#[async_trait::async_trait]
-pub trait Loader<K: Key>: Default + Send + Sync {
-  type Value: Send + Clone + 'static;
-  type Error: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 100;
-  async fn handle_task(
-    &self,
-    task: Task<PendingAssignment<K, Self>>,
-  ) -> Task<CompletionReceipt<K, Self>>;
-}
-pub struct DataLoader<K: Key, T: Loader<K> + 'static> {
+pub struct DataLoader<K: Key, T: TaskHandler<K> + 'static> {
   pub(crate) tx: Sender<ReactorSignal<K, T>>,
   reactor: AtomicTake<RequestReactor<K, T>>,
 }
@@ -26,7 +16,7 @@ pub struct DataLoader<K: Key, T: Loader<K> + 'static> {
 impl<K, T> DataLoader<K, T>
 where
   K: Key,
-  T: Loader<K>,
+  T: TaskHandler<K>,
 {
   pub fn new() -> Self {
     let (tx, rx) = flume::unbounded::<ReactorSignal<K, T>>();
@@ -44,7 +34,7 @@ where
   pub fn load_by<'a>(&'a self, key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
-    T: Loader<K>,
+    T: TaskHandler<K>,
   {
     let (req, rx) = Request::new(key);
 
@@ -54,6 +44,6 @@ where
   }
 }
 
-pub trait StaticLoaderExt<K: Key, T: Loader<K>> {
+pub trait StaticLoaderExt<K: Key, T: TaskHandler<K>> {
   fn loader() -> &'static DataLoader<K, T>;
 }

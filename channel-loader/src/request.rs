@@ -1,11 +1,11 @@
-use crate::{key::Key, loader::Loader};
+use crate::{key::Key, worker::TaskHandler};
 use tokio::sync::oneshot;
-pub(crate) struct Request<K: Key, T: Loader<K>> {
+pub(crate) struct Request<K: Key, T: TaskHandler<K>> {
   pub(crate) key: K,
   pub(crate) tx: oneshot::Sender<Result<Option<T::Value>, T::Error>>,
 }
 
-impl<K: Key, T: Loader<K>> Request<K, T> {
+impl<K: Key, T: TaskHandler<K>> Request<K, T> {
   pub(crate) fn new(
     key: K,
   ) -> (

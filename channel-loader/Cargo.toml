@@ -13,6 +13,16 @@ async-trait = "0.1.50"
 atomic-take = "1.0.0"
 booter = "1.0.2"
 crossbeam = "0.8.0"
+diesel = {version = "1.4.6", features = ["postgres", "r2d2"], optional = true}
+diesel-connection = {version = "1.0.1", optional = true }
 flume = "0.10.5"
 static_init = "1.0.1"
+thiserror = "1.0.25"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+
+[features]
+default = []
+diesel-loader = ["diesel", "diesel-connection"]
+mysql = ["diesel-connection/mysql"]
+postgres = ["diesel-connection/postgres"]
+sqlite = ["diesel-connection/sqlite"]

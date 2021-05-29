@@ -1,11 +1,11 @@
-use crate::{key::Key, loader::Loader};
+use crate::{key::Key, worker::TaskHandler};
 use tokio::sync::oneshot;
 
-pub trait Loadable<K: Key, T: Loader<K>> {
+pub trait Loadable<K: Key, T: TaskHandler<K>> {
   fn load_by<'a>(key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
-    T: Loader<K>;
+    T: TaskHandler<K>;
 }
 
 #[macro_export]
@@ -63,7 +63,10 @@ macro_rules! attach_loader {
       fn load_by<'a>(
         key: $key,
       ) -> oneshot::Receiver<
-        Result<Option<<$loader as Loader<$key>>::Value>, <$loader as Loader<$key>>::Error>,
+        Result<
+          Option<<$loader as TaskHandler<$key>>::Value>,
+          <$loader as TaskHandler<$key>>::Error,
+        >,
       > {
         use $crate::loader::{DataLoader, StaticLoaderExt};
 
@@ -86,7 +89,7 @@ mod tests {
   pub struct BatchSize(usize);
 
   #[async_trait::async_trait]
-  impl Loader<i32> for BatchLoader {
+  impl TaskHandler<i32> for BatchLoader {
     type Value = BatchSize;
     type Error = ();
 

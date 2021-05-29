@@ -1,4 +1,4 @@
-use crate::{key::Key, loader::Loader, reactor::RequestReactor, request::Request};
+use crate::{key::Key, reactor::RequestReactor, request::Request, worker::TaskHandler};
 use crossbeam::{
   atomic::AtomicCell,
   deque::{Steal, Stealer},
@@ -10,18 +10,18 @@ use std::{
 };
 
 pub struct Task<T>(T);
-pub struct PendingAssignment<K: Key, T: Loader<K>> {
+pub struct PendingAssignment<K: Key, T: TaskHandler<K>> {
   reactor_capacity: Arc<AtomicCell<i32>>,
   stealer: Stealer<Request<K, T>>,
 }
-pub struct LoadBatch<K: Key, T: Loader<K>> {
+pub struct LoadBatch<K: Key, T: TaskHandler<K>> {
   requests: Vec<Request<K, T>>,
 }
-pub struct CompletionReceipt<K: Key, T: Loader<K>> {
+pub struct CompletionReceipt<K: Key, T: TaskHandler<K>> {
   key: PhantomData<K>,
   loader: PhantomData<T>,
 }
-pub enum TaskAssignment<K: Key, T: Loader<K>> {
+pub enum TaskAssignment<K: Key, T: TaskHandler<K>> {
   LoadBatch(Task<LoadBatch<K, T>>),
   NoAssignment(Task<CompletionReceipt<K, T>>),
 }
@@ -29,7 +29,7 @@ pub enum TaskAssignment<K: Key, T: Loader<K>> {
 impl<K, T> Task<PendingAssignment<K, T>>
 where
   K: Key,
-  T: Loader<K>,
+  T: TaskHandler<K>,
 {
   #[must_use]
   pub(crate) fn fork_from_reactor(reactor: &RequestReactor<K, T>) -> Self {
@@ -89,7 +89,7 @@ where
 impl<K, T> Task<LoadBatch<K, T>>
 where
   K: Key,
-  T: Loader<K>,
+  T: TaskHandler<K>,
 {
   fn from_requests(requests: Vec<Request<K, T>>) -> Self {
     Task(LoadBatch { requests })
@@ -153,7 +153,7 @@ where
 impl<K, T> Task<CompletionReceipt<K, T>>
 where
   K: Key,
-  T: Loader<K>,
+  T: TaskHandler<K>,
 {
   fn resolve_receipt() -> Self {
     Task(CompletionReceipt {

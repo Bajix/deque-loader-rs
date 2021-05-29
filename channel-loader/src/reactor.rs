@@ -1,14 +1,14 @@
 use crate::{
   key::Key,
-  loader::Loader,
   request::Request,
   task::{PendingAssignment, Task},
+  worker::TaskHandler,
 };
 use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
 use std::sync::Arc;
 
-pub(crate) enum ReactorSignal<K: Key, T: Loader<K> + 'static> {
+pub(crate) enum ReactorSignal<K: Key, T: TaskHandler<K> + 'static> {
   Load(Request<K, T>),
 }
 enum ReactorState {
@@ -17,7 +17,7 @@ enum ReactorState {
   Yielding,
 }
 
-pub(crate) struct RequestReactor<K: Key, T: Loader<K> + 'static> {
+pub(crate) struct RequestReactor<K: Key, T: TaskHandler<K> + 'static> {
   rx: Receiver<ReactorSignal<K, T>>,
   loader: Option<Arc<T>>,
   state: ReactorState,
@@ -28,7 +28,7 @@ pub(crate) struct RequestReactor<K: Key, T: Loader<K> + 'static> {
 impl<K, T> RequestReactor<K, T>
 where
   K: Key,
-  T: Loader<K>,
+  T: TaskHandler<K>,
 {
   pub(crate) fn new(rx: Receiver<ReactorSignal<K, T>>) -> Self {
     RequestReactor {
