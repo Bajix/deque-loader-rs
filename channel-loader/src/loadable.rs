@@ -9,8 +9,8 @@ pub trait Loadable<K: Key, T: Loader<K>> {
 }
 
 #[macro_export]
-macro_rules! attach_loader {
-  ($loadable:ty, $loader:ty, $key:ty) => {
+macro_rules! define_static_loader {
+  ($loader:ty, $key:ty) => {
     use $crate::{
       booter,
       loadable::Loadable,
@@ -27,13 +27,25 @@ macro_rules! attach_loader {
       }
     }
 
-    impl Loadable<$key, $loader> for $loadable {
-      fn load_by<'a>(
-        key: $key,
-      ) -> oneshot::Receiver<
-        Result<Option<<$loader as Loader<$key>>::Value>, <$loader as Loader<$key>>::Error>,
-      > {
-        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader().load_by(key)
+    booter::call_on_boot!({
+      <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
+        .start_detached_reactor();
+    });
+  };
+  ($static_name:ident, $loader:ty, $key: ty) => {
+    use $crate::{
+      booter,
+      loadable::Loadable,
+      loader::{DataLoader, StaticLoaderExt},
+      static_init,
+    };
+
+    #[static_init::dynamic(0)]
+    static mut $static_name: DataLoader<$key, $loader> = DataLoader::new();
+
+    impl StaticLoaderExt<$key, $loader> for DataLoader<$key, $loader> {
+      fn loader() -> &'static DataLoader<$key, $loader> {
+        unsafe { &$static_name }
       }
     }
 
@@ -41,6 +53,23 @@ macro_rules! attach_loader {
       <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
         .start_detached_reactor();
     });
+  };
+}
+
+#[macro_export]
+macro_rules! attach_loader {
+  ($loadable:ty, $loader:ty, $key:ty) => {
+    impl $crate::loadable::Loadable<$key, $loader> for $loadable {
+      fn load_by<'a>(
+        key: $key,
+      ) -> oneshot::Receiver<
+        Result<Option<<$loader as Loader<$key>>::Value>, <$loader as Loader<$key>>::Error>,
+      > {
+        use $crate::loader::{DataLoader, StaticLoaderExt};
+
+        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader().load_by(key)
+      }
+    }
   };
 }
 
@@ -86,6 +115,7 @@ mod tests {
     }
   }
 
+  define_static_loader!(BATCH_LOADER, BatchLoader, i32);
   attach_loader!(BatchSize, BatchLoader, i32);
 
   #[tokio::test]
