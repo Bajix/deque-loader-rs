@@ -3,6 +3,7 @@ use crossbeam::{
   atomic::AtomicCell,
   deque::{Steal, Stealer},
 };
+use itertools::Itertools;
 use std::{
   collections::{HashMap, HashSet},
   marker::PhantomData,
@@ -97,16 +98,14 @@ where
   }
 
   pub fn keys(&self) -> Vec<K> {
-    let mut keys: Vec<K> = self
+    self
       .0
       .requests
       .iter()
-      .map(|req| req.key.to_owned())
-      .collect();
-
-    keys.dedup();
-
-    keys
+      .map(|req| &req.key)
+      .dedup()
+      .map(|k| k.to_owned())
+      .collect_vec()
   }
 
   #[must_use]

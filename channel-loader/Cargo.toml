@@ -16,6 +16,7 @@ crossbeam = "0.8.0"
 diesel = {version = "1.4.6", features = ["postgres", "r2d2"], optional = true}
 diesel-connection = {version = "1.0.1", optional = true }
 flume = "0.10.5"
+itertools = "0.10.0"
 static_init = "1.0.1"
 thiserror = "1.0.25"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
