@@ -78,6 +78,7 @@ where
 
     if requests.len().gt(&0) {
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+      requests.shrink_to_fit();
 
       TaskAssignment::LoadBatch(Task::from_requests(requests))
     } else {
