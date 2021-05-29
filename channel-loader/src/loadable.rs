@@ -1,4 +1,4 @@
-use crate::{key::Key, worker::TaskHandler};
+use crate::{key::Key, task::TaskHandler};
 use tokio::sync::oneshot;
 
 pub trait Loadable<K: Key, T: TaskHandler<K>> {

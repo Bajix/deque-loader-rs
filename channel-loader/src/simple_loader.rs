@@ -1,7 +1,6 @@
 use crate::{
   key::Key,
-  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment},
-  worker::TaskHandler,
+  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use std::{collections::HashMap, marker::PhantomData};
 

@@ -2,7 +2,7 @@ use crate::{
   key::Key,
   reactor::{ReactorSignal, RequestReactor},
   request::Request,
-  worker::TaskHandler,
+  task::TaskHandler,
 };
 use atomic_take::AtomicTake;
 use flume::{self, Sender};

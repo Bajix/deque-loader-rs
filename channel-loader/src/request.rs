@@ -1,4 +1,4 @@
-use crate::{key::Key, worker::TaskHandler};
+use crate::{key::Key, task::TaskHandler};
 use tokio::sync::oneshot;
 pub(crate) struct Request<K: Key, T: TaskHandler<K>> {
   pub(crate) key: K,

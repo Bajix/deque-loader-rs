@@ -18,7 +18,6 @@ mod reactor;
 mod request;
 mod simple_loader;
 pub mod task;
-mod worker;
 
 pub use key::Key;
 pub use loadable::Loadable;

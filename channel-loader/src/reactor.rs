@@ -1,8 +1,7 @@
 use crate::{
   key::Key,
   request::Request,
-  task::{PendingAssignment, Task},
-  worker::TaskHandler,
+  task::{PendingAssignment, Task, TaskHandler},
 };
 use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
