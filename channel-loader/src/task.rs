@@ -3,10 +3,13 @@ use crossbeam::{
   atomic::AtomicCell,
   deque::{Steal, Stealer},
 };
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  marker::PhantomData,
+  sync::Arc,
+};
 
 pub struct Task<T>(T);
-
 pub struct PendingAssignment<K: Key, T: Loader<K>> {
   reactor_capacity: Arc<AtomicCell<i32>>,
   stealer: Stealer<Request<K, T>>,
@@ -48,11 +51,12 @@ where
       stealer,
     }) = self;
 
+    let mut keys: HashSet<K> = HashSet::new();
     let mut requests: Vec<Request<K, T>> = Vec::with_capacity(T::MAX_BATCH_SIZE as usize);
     let mut received_count = 0;
 
     loop {
-      if requests.capacity().eq(&0) {
+      if keys.len().ge(&(T::MAX_BATCH_SIZE as usize)) {
         break;
       }
 
@@ -61,6 +65,7 @@ where
           received_count += 1;
 
           if !req.tx.is_closed() {
+            keys.insert(req.key.clone());
             requests.push(req);
           }
         }
