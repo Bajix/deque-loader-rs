@@ -1,50 +1,20 @@
 use crate::{
   key::Key,
-  loader::{LoadTiming, Loader},
+  loader::Loader,
   request::Request,
   task::{PendingAssignment, Task},
 };
 use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
 use std::sync::Arc;
-use tokio::time::{timeout_at, Instant};
 
 pub(crate) enum ReactorSignal<K: Key, T: Loader<K> + 'static> {
-  Load(Request<K, T>, LoadTiming),
-  EnterDeferralSpan,
-  ExitDeferralSpan,
+  Load(Request<K, T>),
 }
 enum ReactorState {
   Idle,
-  Collecting(i32),
-  AwaitingDeadline(Instant),
   Draining,
   Yielding,
-}
-
-impl ReactorState {
-  fn enter_deferral_span(&mut self) {
-    *self = match self {
-      ReactorState::Collecting(active_deferral_guards) => {
-        ReactorState::Collecting(*active_deferral_guards + 1)
-      }
-      _ => ReactorState::Collecting(1),
-    };
-  }
-
-  fn exit_deferral_span(&mut self) {
-    *self = match self {
-      ReactorState::Collecting(1) => ReactorState::Draining,
-      ReactorState::Collecting(active_deferral_guards) => {
-        ReactorState::Collecting(*active_deferral_guards - 1)
-      }
-      _ => unreachable!(),
-    };
-  }
-
-  fn is_loading_deferred(&self) -> bool {
-    matches!(self, ReactorState::Collecting(_))
-  }
 }
 
 pub(crate) struct RequestReactor<K: Key, T: Loader<K> + 'static> {
@@ -83,26 +53,12 @@ where
     while !self.rx.is_disconnected() {
       let signal = match &self.state {
         ReactorState::Idle => self.rx.recv_async().await.ok(),
-        ReactorState::Collecting(_) => self.rx.recv_async().await.ok(),
-        ReactorState::AwaitingDeadline(deadline) => {
-          match timeout_at(deadline.to_owned(), self.rx.recv_async()).await {
-            Ok(result) => result.ok(),
-            Err(_) => {
-              if !self.state.is_loading_deferred() {
-                self.state = ReactorState::Draining;
-              }
-              None
-            }
-          }
-        }
         ReactorState::Draining => self.rx.try_recv().ok(),
         ReactorState::Yielding => self.rx.try_recv().ok(),
       };
 
       match signal {
-        Some(ReactorSignal::EnterDeferralSpan) => self.state.enter_deferral_span(),
-        Some(ReactorSignal::ExitDeferralSpan) => self.state.exit_deferral_span(),
-        Some(ReactorSignal::Load(request, timing)) => {
+        Some(ReactorSignal::Load(request)) => {
           self.queue.push(request);
 
           if self
@@ -112,18 +68,8 @@ where
           {
             self.spawn_loader();
           } else {
-            match (&self.state, &timing) {
-              (&ReactorState::Idle, &LoadTiming::Immediate) => {
-                self.state = ReactorState::Draining;
-              }
-              (&ReactorState::Idle, &LoadTiming::Deadline) => {
-                self.state =
-                  ReactorState::AwaitingDeadline(Instant::now().checked_add(T::MAX_DELAY).unwrap())
-              }
-              (&ReactorState::AwaitingDeadline(_), &LoadTiming::Immediate) => {
-                self.state = ReactorState::Draining;
-              }
-              _ => (),
+            if matches!(&self.state, &ReactorState::Idle) {
+              self.state = ReactorState::Draining;
             }
           }
         }

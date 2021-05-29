@@ -1,14 +1,8 @@
-use crate::{
-  key::Key,
-  loader::{LoadOptions, Loader},
-};
+use crate::{key::Key, loader::Loader};
 use tokio::sync::oneshot;
 
 pub trait Loadable<K: Key, T: Loader<K>> {
-  fn load_by<'a>(
-    key: K,
-    otions: LoadOptions<'a>,
-  ) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
+  fn load_by<'a>(key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
     T: Loader<K>;
@@ -17,15 +11,10 @@ pub trait Loadable<K: Key, T: Loader<K>> {
 #[macro_export]
 macro_rules! attach_loader {
   ($loadable:ty, $loader:ty, $key:ty) => {
-    use std::any::TypeId;
-
     use $crate::{
       booter,
-      crossbeam::atomic::AtomicCell,
-      deferral_token::{DeferralCoordinator, DeferralToken},
       loadable::Loadable,
-      loader::{DataLoader, LoadOptions, StaticLoaderExt},
-      reactor::ReactorSignal,
+      loader::{DataLoader, StaticLoaderExt},
       static_init,
     };
 
@@ -41,38 +30,12 @@ macro_rules! attach_loader {
     impl Loadable<$key, $loader> for $loadable {
       fn load_by<'a>(
         key: $key,
-        options: LoadOptions<'a>,
       ) -> oneshot::Receiver<
         Result<Option<<$loader as Loader<$key>>::Value>, <$loader as Loader<$key>>::Error>,
       > {
-        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
-          .load_by(key, options)
+        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader().load_by(key)
       }
     }
-
-    inventory::submit!({
-      DeferralCoordinator::new(
-        Box::new(|guards| {
-          let type_id = TypeId::of::<DataLoader<$key, $loader>>();
-          let deferral_active = AtomicCell::<bool>::new(false);
-          guards.insert(type_id, deferral_active);
-        }),
-        Box::new(|deferral_map| {
-          let type_id = TypeId::of::<DataLoader<$key, $loader>>();
-
-          let deferral_active = deferral_map.get(&type_id).expect(
-            "Missing DeferralCoordinator for DataLoader. see attach_loader macro for usage",
-          );
-
-          if deferral_active.compare_exchange(true, false).is_ok() {
-            <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
-              .tx
-              .send(ReactorSignal::ExitDeferralSpan)
-              .ok();
-          }
-        }),
-      )
-    });
 
     booter::call_on_boot!({
       <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
@@ -84,10 +47,7 @@ macro_rules! attach_loader {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{
-    loader::LoadTiming,
-    task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment},
-  };
+  use crate::task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment};
   use std::{collections::HashMap, iter};
 
   #[derive(Default)]
@@ -132,15 +92,7 @@ mod tests {
   async fn it_loads() -> Result<(), ()> {
     booter::boot();
 
-    let data = BatchSize::load_by(
-      1_i32,
-      LoadOptions {
-        timing: LoadTiming::Immediate,
-        deferral_token: None,
-      },
-    )
-    .await
-    .unwrap()?;
+    let data = BatchSize::load_by(1_i32).await.unwrap()?;
 
     assert!(data.is_some());
 
@@ -151,21 +103,9 @@ mod tests {
   async fn it_auto_batches() -> Result<(), ()> {
     booter::boot();
 
-    let a = BatchSize::load_by(
-      2_i32,
-      LoadOptions {
-        timing: LoadTiming::Immediate,
-        deferral_token: None,
-      },
-    );
+    let a = BatchSize::load_by(2_i32);
 
-    let _b = BatchSize::load_by(
-      3_i32,
-      LoadOptions {
-        timing: LoadTiming::Immediate,
-        deferral_token: None,
-      },
-    );
+    let _b = BatchSize::load_by(3_i32);
 
     let data = a.await.unwrap()?;
 
@@ -174,48 +114,6 @@ mod tests {
     } else {
       panic!("Request failed to batch");
     }
-
-    Ok(())
-  }
-
-  #[tokio::test]
-  async fn it_deadline_loads() -> Result<(), ()> {
-    booter::boot();
-
-    let data = BatchSize::load_by(
-      4_i32,
-      LoadOptions {
-        timing: LoadTiming::Deadline,
-        deferral_token: None,
-      },
-    )
-    .await
-    .unwrap()?;
-
-    assert!(data.is_some());
-
-    Ok(())
-  }
-
-  #[tokio::test]
-  async fn it_defers_loading() -> Result<(), ()> {
-    booter::boot();
-
-    let deferral_token = DeferralToken::default();
-
-    let receiver = BatchSize::load_by(
-      5_i32,
-      LoadOptions {
-        timing: LoadTiming::Immediate,
-        deferral_token: Some(&deferral_token),
-      },
-    );
-
-    deferral_token.send_pending_requests();
-
-    let data = receiver.await.unwrap()?;
-
-    assert!(data.is_some());
 
     Ok(())
   }
