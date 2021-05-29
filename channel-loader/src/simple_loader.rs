@@ -41,10 +41,7 @@ where
   type Error = <T as SimpleWorker<K>>::Error;
   const MAX_BATCH_SIZE: i32 = <T as SimpleWorker<K>>::MAX_BATCH_SIZE;
 
-  async fn handle_task(
-    &self,
-    task: Task<PendingAssignment<K, Self>>,
-  ) -> Task<CompletionReceipt<K, Self>> {
+  async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>> {
     match task.get_assignment() {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();

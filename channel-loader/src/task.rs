@@ -18,8 +18,8 @@ pub struct LoadBatch<K: Key, T: TaskHandler<K>> {
   requests: Vec<Request<K, T>>,
 }
 pub struct CompletionReceipt<K: Key, T: TaskHandler<K>> {
-  key: PhantomData<K>,
-  loader: PhantomData<T>,
+  key: PhantomData<fn() -> K>,
+  loader: PhantomData<fn() -> T>,
 }
 pub enum TaskAssignment<K: Key, T: TaskHandler<K>> {
   LoadBatch(Task<LoadBatch<K, T>>),

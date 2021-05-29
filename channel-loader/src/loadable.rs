@@ -94,7 +94,6 @@ mod tests {
     type Error = ();
 
     async fn handle_task(
-      &self,
       task: Task<PendingAssignment<i32, BatchLoader>>,
     ) -> Task<CompletionReceipt<i32, BatchLoader>> {
       match task.get_assignment() {

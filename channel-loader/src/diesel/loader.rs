@@ -42,10 +42,7 @@ where
   type Error = SimpleDieselError;
   const MAX_BATCH_SIZE: i32 = <T as DieselWorker<K>>::MAX_BATCH_SIZE;
 
-  async fn handle_task(
-    &self,
-    task: Task<PendingAssignment<K, Self>>,
-  ) -> Task<CompletionReceipt<K, Self>> {
+  async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>> {
     spawn_blocking(move || {
       let conn = get_connection();
 
