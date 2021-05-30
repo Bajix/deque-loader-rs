@@ -36,15 +36,15 @@ where
   K: Key,
   T: SimpleWorker<K> + 'static,
 {
-  type Value = <T as SimpleWorker<K>>::Value;
-  type Error = <T as SimpleWorker<K>>::Error;
-  const MAX_BATCH_SIZE: i32 = <T as SimpleWorker<K>>::MAX_BATCH_SIZE;
+  type Value = T::Value;
+  type Error = T::Error;
+  const MAX_BATCH_SIZE: i32 = T::MAX_BATCH_SIZE;
 
   async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>> {
     match task.get_assignment() {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
-        let result = <T as SimpleWorker<K>>::load(keys).await;
+        let result = T::load(keys).await;
         task.resolve(result)
       }
       TaskAssignment::NoAssignment(receipt) => receipt,

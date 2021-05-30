@@ -31,7 +31,7 @@ where
     }
   }
 
-  pub fn load_by<'a>(&'a self, key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
+  pub fn load_by(&self, key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
     T: TaskHandler<K>,

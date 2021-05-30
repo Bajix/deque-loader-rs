@@ -62,10 +62,8 @@ where
             .lt(&T::MAX_BATCH_SIZE.saturating_neg())
           {
             self.spawn_loader();
-          } else {
-            if matches!(&self.state, &ReactorState::Idle) {
-              self.state = ReactorState::Draining;
-            }
+          } else if matches!(&self.state, &ReactorState::Idle) {
+            self.state = ReactorState::Draining;
           }
         }
         None => {

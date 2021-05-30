@@ -2,7 +2,7 @@ use crate::{key::Key, task::TaskHandler};
 use tokio::sync::oneshot;
 
 pub trait Loadable<K: Key, T: TaskHandler<K>> {
-  fn load_by<'a>(key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
+  fn load_by(key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     K: Key,
     T: TaskHandler<K>;
@@ -60,7 +60,7 @@ macro_rules! define_static_loader {
 macro_rules! attach_loader {
   ($loadable:ty, $loader:ty, $key:ty) => {
     impl $crate::loadable::Loadable<$key, $loader> for $loadable {
-      fn load_by<'a>(
+      fn load_by(
         key: $key,
       ) -> oneshot::Receiver<
         Result<
@@ -100,8 +100,6 @@ mod tests {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, BatchSize> = HashMap::new();
           let keys = task.keys();
-
-          println!("keys: {:?}", &keys);
 
           data.extend(
             task

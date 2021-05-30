@@ -37,9 +37,9 @@ where
   K: Key,
   T: DieselWorker<K> + 'static,
 {
-  type Value = <T as DieselWorker<K>>::Value;
+  type Value = T::Value;
   type Error = SimpleDieselError;
-  const MAX_BATCH_SIZE: i32 = <T as DieselWorker<K>>::MAX_BATCH_SIZE;
+  const MAX_BATCH_SIZE: i32 = T::MAX_BATCH_SIZE;
 
   async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>> {
     spawn_blocking(move || {
@@ -49,7 +49,7 @@ where
         TaskAssignment::LoadBatch(task) => match conn {
           Ok(conn) => {
             let keys = task.keys();
-            let result = <T as DieselWorker<K>>::load(conn, keys).map_err(|err| err.into());
+            let result = T::load(conn, keys).map_err(|err| err.into());
             task.resolve(result)
           }
           Err(err) => task.resolve(Err(err.into())),
