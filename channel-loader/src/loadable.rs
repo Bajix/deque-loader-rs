@@ -22,6 +22,7 @@ macro_rules! define_static_loader {
 
     impl StaticLoaderExt<$loader> for DataLoader<$loader> {
       fn loader() -> &'static DataLoader<$loader> {
+        booter::assert_booted();
         unsafe { &LOADER }
       }
     }
@@ -43,6 +44,7 @@ macro_rules! define_static_loader {
 
     impl StaticLoaderExt<$loader> for DataLoader<$loader> {
       fn loader() -> &'static DataLoader<$loader> {
+        booter::assert_booted();
         unsafe { &$static_name }
       }
     }
