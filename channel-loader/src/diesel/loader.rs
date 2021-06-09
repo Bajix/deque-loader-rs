@@ -8,6 +8,7 @@ use tokio::task::spawn_blocking;
 
 use super::error::{DieselError, SimpleDieselError};
 
+/// a [`diesel`] specific loader interface designed with that optimizes batching around connection acquisition using [`diesel_connection::get_connection`].
 pub trait DieselWorker: Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
@@ -17,6 +18,8 @@ pub trait DieselWorker: Send + Sync {
     keys: Vec<Self::Key>,
   ) -> Result<HashMap<Self::Key, Self::Value>, DieselError>;
 }
+
+/// a wrapper type that generically implements [`TaskHandler`] for inner types that implement [`DieselWorker`]
 pub struct DieselLoader<T: DieselWorker> {
   worker: PhantomData<fn() -> T>,
 }
@@ -35,7 +38,7 @@ where
 #[async_trait::async_trait]
 impl<T> TaskHandler for DieselLoader<T>
 where
-  T: DieselWorker,
+  T: DieselWorker + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;

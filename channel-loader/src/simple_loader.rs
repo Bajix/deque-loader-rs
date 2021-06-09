@@ -4,6 +4,7 @@ use crate::{
 };
 use std::{collections::HashMap, marker::PhantomData};
 
+/// a simplified loader interface with automatic task handling
 #[async_trait::async_trait]
 pub trait SimpleWorker: Send + Sync {
   type Key: Key;
@@ -13,6 +14,7 @@ pub trait SimpleWorker: Send + Sync {
   async fn load(keys: Vec<Self::Key>) -> Result<HashMap<Self::Key, Self::Value>, Self::Error>;
 }
 
+/// convenience [`TaskHandler`] wrapper implementation useful for whenever task assignment cannot be deferred.
 pub struct SimpleLoader<T: SimpleWorker> {
   worker: PhantomData<fn() -> T>,
 }

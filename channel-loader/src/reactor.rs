@@ -15,6 +15,7 @@ enum ReactorState {
   Yielding,
 }
 
+/// capacity aware task-scheduler
 pub(crate) struct RequestReactor<T: TaskHandler + 'static> {
   rx: Receiver<ReactorSignal<T>>,
   state: ReactorState,

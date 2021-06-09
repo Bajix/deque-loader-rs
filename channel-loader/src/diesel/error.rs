@@ -5,6 +5,7 @@ use diesel::{
 use diesel_connection::PoolError;
 use thiserror::Error;
 
+/// A combination of all [`diesel`] error types as well as the convenience types Forbidden, Unauthorized and NotFound
 #[derive(Error, Debug)]
 pub enum DieselError {
   #[error("Forbidden")]
@@ -21,6 +22,7 @@ pub enum DieselError {
   QueryError(#[from] diesel::result::Error),
 }
 
+/// Simplified [`diesel`] error types that are [`Clone`]
 #[derive(Error, Debug, Clone)]
 pub enum SimpleDieselError {
   #[error("Forbidden")]

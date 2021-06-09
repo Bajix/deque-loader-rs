@@ -1,12 +1,15 @@
 use crate::task::TaskHandler;
 use tokio::sync::oneshot;
 
+/// Loadable types load using the corresponding static loader associated by type via [`define_static_loader`]
 pub trait Loadable<T: TaskHandler> {
+  /// Load a value by it's key in a batched load to be schedule after the next [`TaskHandler`] is ready for a task assignment, typically after yielding to [`tokio`] and a connection has been acquired
   fn load_by(key: T::Key) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
     T: TaskHandler;
 }
 
+/// Defines a static `DataLoader` instance from a type that implements [`TaskHandler`] and registers reactor initialization to be handled via [`booter::boot()`];
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
@@ -27,6 +30,8 @@ macro_rules! define_static_loader {
       }
     }
 
+    // Registered to be called via booter::boot() within main.
+    // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
     booter::call_on_boot!({
       <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
     });
@@ -49,12 +54,15 @@ macro_rules! define_static_loader {
       }
     }
 
+    // Registered to be called via [`booter::boot()`] within main.
+    // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
     booter::call_on_boot!({
       <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
     });
   };
 }
 
+/// Implements [`Loadable`] using the corresponding static instance as defined by [`define_static_loader`]
 #[macro_export]
 macro_rules! attach_loader {
   ($loadable:ty, $loader:ty) => {

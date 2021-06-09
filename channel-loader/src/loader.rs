@@ -7,6 +7,7 @@ use atomic_take::AtomicTake;
 use flume::{self, Sender};
 use tokio::sync::oneshot;
 
+/// Core load channel responsible for receiving incoming load_by requests to be processed by a detached [`RequestReactor`]
 pub struct DataLoader<T: TaskHandler + 'static> {
   pub(crate) tx: Sender<ReactorSignal<T>>,
   reactor: AtomicTake<RequestReactor<T>>,

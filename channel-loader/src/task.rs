@@ -10,6 +10,7 @@ use std::{
   sync::Arc,
 };
 
+/// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work consolidation
 #[async_trait::async_trait]
 pub trait TaskHandler: Default + Send + Sync {
   type Key: Key;
@@ -20,18 +21,27 @@ pub trait TaskHandler: Default + Send + Sync {
 }
 
 pub struct Task<T>(T);
+/// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
   reactor_capacity: Arc<AtomicCell<i32>>,
   stealer: Stealer<Request<T>>,
 }
+
+/// A batch of load requests, unique by key, to be loaded and the result resolved
 pub struct LoadBatch<T: TaskHandler> {
   requests: Vec<Request<T>>,
 }
+/// An acknowledgement of task completion as to enforce a design contract that allows ownership of requests to be taken by the task handler.
+/// This is a workaround to [rust-lang/rust#59337](https://github.com/rust-lang/rust/issues/59337) that enables task assignment to occur within a [`tokio::task::spawn_blocking`] closure
 pub struct CompletionReceipt<T: TaskHandler> {
   loader: PhantomData<fn() -> T>,
 }
+
+/// A conditional assignment of work as a [`LoadBatch`]
 pub enum TaskAssignment<T: TaskHandler> {
+  /// A batch of keys to load values for
   LoadBatch(Task<LoadBatch<T>>),
+  /// If other task handlers opportunistically resolve all tasks, there will be no task assignment and the handler can drop unused connections for use elsewhere
   NoAssignment(Task<CompletionReceipt<T>>),
 }
 
@@ -52,7 +62,7 @@ where
     })
   }
 
-  #[must_use]
+  // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
   pub fn get_assignment(self) -> TaskAssignment<T> {
     let Task(PendingAssignment {
       reactor_capacity,
