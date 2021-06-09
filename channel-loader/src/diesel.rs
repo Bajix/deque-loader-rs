@@ -1,5 +1,5 @@
-pub mod error;
-pub mod loader;
+mod error;
+mod loader;
 
-pub use error::*;
-pub use loader::*;
+pub use error::{DieselError, SimpleDieselError};
+pub use loader::{DieselLoader, DieselWorker};
