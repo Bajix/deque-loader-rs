@@ -1,15 +1,15 @@
-use crate::{key::Key, task::TaskHandler};
+use crate::task::TaskHandler;
 use tokio::sync::oneshot;
-pub(crate) struct Request<K: Key, T: TaskHandler<K>> {
-  pub(crate) key: K,
+pub(crate) struct Request<T: TaskHandler> {
+  pub(crate) key: T::Key,
   pub(crate) tx: oneshot::Sender<Result<Option<T::Value>, T::Error>>,
 }
 
-impl<K: Key, T: TaskHandler<K>> Request<K, T> {
+impl<T: TaskHandler> Request<T> {
   pub(crate) fn new(
-    key: K,
+    key: T::Key,
   ) -> (
-    Request<K, T>,
+    Request<T>,
     oneshot::Receiver<Result<Option<T::Value>, T::Error>>,
   ) {
     let (tx, rx) = oneshot::channel();

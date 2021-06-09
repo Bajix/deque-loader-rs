@@ -1,16 +1,15 @@
-use crate::{key::Key, task::TaskHandler};
+use crate::task::TaskHandler;
 use tokio::sync::oneshot;
 
-pub trait Loadable<K: Key, T: TaskHandler<K>> {
-  fn load_by(key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
+pub trait Loadable<T: TaskHandler> {
+  fn load_by(key: T::Key) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
-    K: Key,
-    T: TaskHandler<K>;
+    T: TaskHandler;
 }
 
 #[macro_export]
 macro_rules! define_static_loader {
-  ($loader:ty, $key:ty) => {
+  ($loader:ty) => {
     use $crate::{
       booter,
       loadable::Loadable,
@@ -19,20 +18,19 @@ macro_rules! define_static_loader {
     };
 
     #[static_init::dynamic(0)]
-    static mut LOADER: DataLoader<$key, $loader> = DataLoader::new();
+    static mut LOADER: DataLoader<$loader> = DataLoader::new();
 
-    impl StaticLoaderExt<$key, $loader> for DataLoader<$key, $loader> {
-      fn loader() -> &'static DataLoader<$key, $loader> {
+    impl StaticLoaderExt<$loader> for DataLoader<$loader> {
+      fn loader() -> &'static DataLoader<$loader> {
         unsafe { &LOADER }
       }
     }
 
     booter::call_on_boot!({
-      <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
-        .start_detached_reactor();
+      <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
     });
   };
-  ($static_name:ident, $loader:ty, $key: ty) => {
+  ($static_name:ident, $loader:ty) => {
     use $crate::{
       booter,
       loadable::Loadable,
@@ -41,36 +39,32 @@ macro_rules! define_static_loader {
     };
 
     #[static_init::dynamic(0)]
-    static mut $static_name: DataLoader<$key, $loader> = DataLoader::new();
+    static mut $static_name: DataLoader<$loader> = DataLoader::new();
 
-    impl StaticLoaderExt<$key, $loader> for DataLoader<$key, $loader> {
-      fn loader() -> &'static DataLoader<$key, $loader> {
+    impl StaticLoaderExt<$loader> for DataLoader<$loader> {
+      fn loader() -> &'static DataLoader<$loader> {
         unsafe { &$static_name }
       }
     }
 
     booter::call_on_boot!({
-      <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader()
-        .start_detached_reactor();
+      <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
     });
   };
 }
 
 #[macro_export]
 macro_rules! attach_loader {
-  ($loadable:ty, $loader:ty, $key:ty) => {
-    impl $crate::loadable::Loadable<$key, $loader> for $loadable {
+  ($loadable:ty, $loader:ty) => {
+    impl $crate::loadable::Loadable<$loader> for $loadable {
       fn load_by(
-        key: $key,
-      ) -> oneshot::Receiver<
-        Result<
-          Option<<$loader as TaskHandler<$key>>::Value>,
-          <$loader as TaskHandler<$key>>::Error,
-        >,
+        key: <$loader as TaskHandler>::Key,
+      ) -> tokio::sync::oneshot::Receiver<
+        Result<Option<<$loader as TaskHandler>::Value>, <$loader as TaskHandler>::Error>,
       > {
-        use $crate::loader::{DataLoader, StaticLoaderExt};
+        use $crate::loader::StaticLoaderExt;
 
-        <DataLoader<$key, $loader> as StaticLoaderExt<$key, $loader>>::loader().load_by(key)
+        <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().load_by(key)
       }
     }
   };
@@ -89,13 +83,14 @@ mod tests {
   pub struct BatchSize(usize);
 
   #[async_trait::async_trait]
-  impl TaskHandler<i32> for BatchLoader {
+  impl TaskHandler for BatchLoader {
+    type Key = i32;
     type Value = BatchSize;
     type Error = ();
 
     async fn handle_task(
-      task: Task<PendingAssignment<i32, BatchLoader>>,
-    ) -> Task<CompletionReceipt<i32, BatchLoader>> {
+      task: Task<PendingAssignment<BatchLoader>>,
+    ) -> Task<CompletionReceipt<BatchLoader>> {
       match task.get_assignment() {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, BatchSize> = HashMap::new();
@@ -115,8 +110,8 @@ mod tests {
     }
   }
 
-  define_static_loader!(BATCH_LOADER, BatchLoader, i32);
-  attach_loader!(BatchSize, BatchLoader, i32);
+  define_static_loader!(BATCH_LOADER, BatchLoader);
+  attach_loader!(BatchSize, BatchLoader);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {

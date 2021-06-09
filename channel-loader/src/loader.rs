@@ -1,5 +1,4 @@
 use crate::{
-  key::Key,
   reactor::{ReactorSignal, RequestReactor},
   request::Request,
   task::TaskHandler,
@@ -8,18 +7,17 @@ use atomic_take::AtomicTake;
 use flume::{self, Sender};
 use tokio::sync::oneshot;
 
-pub struct DataLoader<K: Key, T: TaskHandler<K> + 'static> {
-  pub(crate) tx: Sender<ReactorSignal<K, T>>,
-  reactor: AtomicTake<RequestReactor<K, T>>,
+pub struct DataLoader<T: TaskHandler + 'static> {
+  pub(crate) tx: Sender<ReactorSignal<T>>,
+  reactor: AtomicTake<RequestReactor<T>>,
 }
 
-impl<K, T> DataLoader<K, T>
+impl<T> DataLoader<T>
 where
-  K: Key,
-  T: TaskHandler<K>,
+  T: TaskHandler,
 {
   pub fn new() -> Self {
-    let (tx, rx) = flume::unbounded::<ReactorSignal<K, T>>();
+    let (tx, rx) = flume::unbounded::<ReactorSignal<T>>();
     let reactor = AtomicTake::new(RequestReactor::new(rx));
     Self { tx, reactor }
   }
@@ -31,10 +29,9 @@ where
     }
   }
 
-  pub fn load_by(&self, key: K) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
+  pub fn load_by(&self, key: T::Key) -> oneshot::Receiver<Result<Option<T::Value>, T::Error>>
   where
-    K: Key,
-    T: TaskHandler<K>,
+    T: TaskHandler,
   {
     let (req, rx) = Request::new(key);
 
@@ -44,6 +41,6 @@ where
   }
 }
 
-pub trait StaticLoaderExt<K: Key, T: TaskHandler<K>> {
-  fn loader() -> &'static DataLoader<K, T>;
+pub trait StaticLoaderExt<T: TaskHandler> {
+  fn loader() -> &'static DataLoader<T>;
 }

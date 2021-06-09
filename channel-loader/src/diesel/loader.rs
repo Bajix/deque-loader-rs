@@ -8,40 +8,41 @@ use tokio::task::spawn_blocking;
 
 use super::error::{DieselError, SimpleDieselError};
 
-pub trait DieselWorker<K: Key>: Send + Sync {
+pub trait DieselWorker: Send + Sync {
+  type Key: Key;
   type Value: Send + Clone + 'static;
   const MAX_BATCH_SIZE: i32 = 100;
-  fn load(conn: PooledConnection, keys: Vec<K>) -> Result<HashMap<K, Self::Value>, DieselError>;
+  fn load(
+    conn: PooledConnection,
+    keys: Vec<Self::Key>,
+  ) -> Result<HashMap<Self::Key, Self::Value>, DieselError>;
 }
-pub struct DieselLoader<K: Key, T: DieselWorker<K>> {
-  key: PhantomData<fn() -> K>,
+pub struct DieselLoader<T: DieselWorker> {
   worker: PhantomData<fn() -> T>,
 }
 
-impl<K, T> Default for DieselLoader<K, T>
+impl<T> Default for DieselLoader<T>
 where
-  K: Key,
-  T: DieselWorker<K>,
+  T: DieselWorker,
 {
   fn default() -> Self {
     DieselLoader {
-      key: PhantomData,
       worker: PhantomData,
     }
   }
 }
 
 #[async_trait::async_trait]
-impl<K, T> TaskHandler<K> for DieselLoader<K, T>
+impl<T> TaskHandler for DieselLoader<T>
 where
-  K: Key,
-  T: DieselWorker<K> + 'static,
+  T: DieselWorker + 'static,
 {
+  type Key = T::Key;
   type Value = T::Value;
   type Error = SimpleDieselError;
   const MAX_BATCH_SIZE: i32 = T::MAX_BATCH_SIZE;
 
-  async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>> {
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
     spawn_blocking(move || {
       let conn = get_connection();
 

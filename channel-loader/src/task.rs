@@ -10,30 +10,37 @@ use std::{
   sync::Arc,
 };
 
-pub struct Task<T>(T);
-pub struct PendingAssignment<K: Key, T: TaskHandler<K>> {
-  reactor_capacity: Arc<AtomicCell<i32>>,
-  stealer: Stealer<Request<K, T>>,
-}
-pub struct LoadBatch<K: Key, T: TaskHandler<K>> {
-  requests: Vec<Request<K, T>>,
-}
-pub struct CompletionReceipt<K: Key, T: TaskHandler<K>> {
-  key: PhantomData<fn() -> K>,
-  loader: PhantomData<fn() -> T>,
-}
-pub enum TaskAssignment<K: Key, T: TaskHandler<K>> {
-  LoadBatch(Task<LoadBatch<K, T>>),
-  NoAssignment(Task<CompletionReceipt<K, T>>),
+#[async_trait::async_trait]
+pub trait TaskHandler: Default + Send + Sync {
+  type Key: Key;
+  type Value: Send + Clone + 'static;
+  type Error: Send + Clone + 'static;
+  const MAX_BATCH_SIZE: i32 = 100;
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
 }
 
-impl<K, T> Task<PendingAssignment<K, T>>
+pub struct Task<T>(T);
+pub struct PendingAssignment<T: TaskHandler> {
+  reactor_capacity: Arc<AtomicCell<i32>>,
+  stealer: Stealer<Request<T>>,
+}
+pub struct LoadBatch<T: TaskHandler> {
+  requests: Vec<Request<T>>,
+}
+pub struct CompletionReceipt<T: TaskHandler> {
+  loader: PhantomData<fn() -> T>,
+}
+pub enum TaskAssignment<T: TaskHandler> {
+  LoadBatch(Task<LoadBatch<T>>),
+  NoAssignment(Task<CompletionReceipt<T>>),
+}
+
+impl<T> Task<PendingAssignment<T>>
 where
-  K: Key,
-  T: TaskHandler<K>,
+  T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn fork_from_reactor(reactor: &RequestReactor<K, T>) -> Self {
+  pub(crate) fn fork_from_reactor(reactor: &RequestReactor<T>) -> Self {
     let reactor_capacity = reactor.scheduled_capacity.clone();
     let stealer = reactor.queue.stealer();
 
@@ -46,14 +53,14 @@ where
   }
 
   #[must_use]
-  pub fn get_assignment(self) -> TaskAssignment<K, T> {
+  pub fn get_assignment(self) -> TaskAssignment<T> {
     let Task(PendingAssignment {
       reactor_capacity,
       stealer,
     }) = self;
 
-    let mut keys: HashSet<K> = HashSet::new();
-    let mut requests: Vec<Request<K, T>> = Vec::with_capacity(T::MAX_BATCH_SIZE as usize);
+    let mut keys: HashSet<T::Key> = HashSet::new();
+    let mut requests: Vec<Request<T>> = Vec::with_capacity(T::MAX_BATCH_SIZE as usize);
     let mut received_count = 0;
 
     loop {
@@ -88,16 +95,15 @@ where
   }
 }
 
-impl<K, T> Task<LoadBatch<K, T>>
+impl<T> Task<LoadBatch<T>>
 where
-  K: Key,
-  T: TaskHandler<K>,
+  T: TaskHandler,
 {
-  fn from_requests(requests: Vec<Request<K, T>>) -> Self {
+  fn from_requests(requests: Vec<Request<T>>) -> Self {
     Task(LoadBatch { requests })
   }
 
-  pub fn keys(&self) -> Vec<K> {
+  pub fn keys(&self) -> Vec<T::Key> {
     self
       .0
       .requests
@@ -111,8 +117,8 @@ where
   #[must_use]
   pub fn resolve(
     self,
-    results: Result<HashMap<K, T::Value>, T::Error>,
-  ) -> Task<CompletionReceipt<K, T>> {
+    results: Result<HashMap<T::Key, T::Value>, T::Error>,
+  ) -> Task<CompletionReceipt<T>> {
     let Task(LoadBatch { requests }) = self;
 
     match results {
@@ -146,26 +152,17 @@ where
       }
     };
 
-    Task::<CompletionReceipt<K, T>>::resolve_receipt()
+    Task::<CompletionReceipt<T>>::resolve_receipt()
   }
 }
 
-impl<K, T> Task<CompletionReceipt<K, T>>
+impl<T> Task<CompletionReceipt<T>>
 where
-  K: Key,
-  T: TaskHandler<K>,
+  T: TaskHandler,
 {
   fn resolve_receipt() -> Self {
     Task(CompletionReceipt {
-      key: PhantomData,
       loader: PhantomData,
     })
   }
-}
-#[async_trait::async_trait]
-pub trait TaskHandler<K: Key>: Default + Send + Sync {
-  type Value: Send + Clone + 'static;
-  type Error: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 100;
-  async fn handle_task(task: Task<PendingAssignment<K, Self>>) -> Task<CompletionReceipt<K, Self>>;
 }

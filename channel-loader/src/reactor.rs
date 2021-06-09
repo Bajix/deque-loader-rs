@@ -1,5 +1,4 @@
 use crate::{
-  key::Key,
   request::Request,
   task::{PendingAssignment, Task, TaskHandler},
 };
@@ -7,8 +6,8 @@ use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
 use std::sync::Arc;
 
-pub(crate) enum ReactorSignal<K: Key, T: TaskHandler<K> + 'static> {
-  Load(Request<K, T>),
+pub(crate) enum ReactorSignal<T: TaskHandler + 'static> {
+  Load(Request<T>),
 }
 enum ReactorState {
   Idle,
@@ -16,19 +15,18 @@ enum ReactorState {
   Yielding,
 }
 
-pub(crate) struct RequestReactor<K: Key, T: TaskHandler<K> + 'static> {
-  rx: Receiver<ReactorSignal<K, T>>,
+pub(crate) struct RequestReactor<T: TaskHandler + 'static> {
+  rx: Receiver<ReactorSignal<T>>,
   state: ReactorState,
-  pub(crate) queue: Worker<Request<K, T>>,
+  pub(crate) queue: Worker<Request<T>>,
   pub(crate) scheduled_capacity: Arc<AtomicCell<i32>>,
 }
 
-impl<K, T> RequestReactor<K, T>
+impl<T> RequestReactor<T>
 where
-  K: Key,
-  T: TaskHandler<K>,
+  T: TaskHandler,
 {
-  pub(crate) fn new(rx: Receiver<ReactorSignal<K, T>>) -> Self {
+  pub(crate) fn new(rx: Receiver<ReactorSignal<T>>) -> Self {
     RequestReactor {
       rx,
       state: ReactorState::Idle,
@@ -83,7 +81,7 @@ where
   }
 
   fn spawn_loader(&mut self) {
-    let load_task: Task<PendingAssignment<K, T>> = Task::fork_from_reactor(&self);
+    let load_task: Task<PendingAssignment<T>> = Task::fork_from_reactor(&self);
 
     tokio::task::spawn(async move {
       T::handle_task(load_task).await;
