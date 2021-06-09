@@ -22,7 +22,7 @@ thiserror = "1.0.25"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [features]
-default = []
+default = ["diesel-loader"]
 diesel-loader = ["diesel", "diesel-connection"]
 mysql = ["diesel-connection/mysql"]
 postgres = ["diesel-connection/postgres"]

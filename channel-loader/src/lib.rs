@@ -9,7 +9,7 @@ pub extern crate crossbeam;
 #[doc(hidden)]
 pub extern crate static_init;
 
-#[cfg(feature = "diesel-loader")]
+#[cfg(any(feature = "diesel-loader", doc))]
 pub mod diesel;
 mod key;
 mod loadable;
