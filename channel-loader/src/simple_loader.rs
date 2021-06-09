@@ -31,7 +31,7 @@ where
 #[async_trait::async_trait]
 impl<T> TaskHandler for SimpleLoader<T>
 where
-  T: SimpleWorker + 'static,
+  T: SimpleWorker,
 {
   type Key = T::Key;
   type Value = T::Value;

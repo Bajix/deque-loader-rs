@@ -6,7 +6,7 @@ use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
 use std::sync::Arc;
 
-pub(crate) enum ReactorSignal<T: TaskHandler + 'static> {
+pub(crate) enum ReactorSignal<T: TaskHandler> {
   Load(Request<T>),
 }
 enum ReactorState {

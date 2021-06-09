@@ -35,7 +35,7 @@ where
 #[async_trait::async_trait]
 impl<T> TaskHandler for DieselLoader<T>
 where
-  T: DieselWorker + 'static,
+  T: DieselWorker,
 {
   type Key = T::Key;
   type Value = T::Value;
