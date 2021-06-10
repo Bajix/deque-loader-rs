@@ -110,3 +110,21 @@ impl From<DatabaseErrorKind> for SimpleDieselError {
     }
   }
 }
+
+#[cfg(feature = "graphql")]
+impl async_graphql::ErrorExtensions for SimpleDieselError {
+  fn extend(&self) -> async_graphql::FieldError {
+    self.extend_with(|err, e| match err {
+      SimpleDieselError::Forbidden => e.set("code", "Forbidden"),
+      SimpleDieselError::Unauthorized => e.set("code", "Unauthorized"),
+      SimpleDieselError::NotFound => e.set("code", "NotFound"),
+      SimpleDieselError::BadConnection => e.set("code", "BadConnection"),
+      SimpleDieselError::InvalidConnection => e.set("code", "InvalidConnection"),
+      SimpleDieselError::RollbackTransaction => e.set("code", "RollbackTransaction"),
+      SimpleDieselError::UniqueViolation => e.set("code", "UniqueViolation"),
+      SimpleDieselError::ForeignKeyViolation => e.set("code", "ForeignKeyViolation"),
+      SimpleDieselError::ConnectionTimeout => e.set("code", "ConnectionTimeout"),
+      SimpleDieselError::DatabaseError => e.set("code", "DatabaseError"),
+    })
+  }
+}

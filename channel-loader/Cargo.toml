@@ -9,6 +9,7 @@ license = "MIT"
 repository = "https://github.com/Bajix/channel-loader-rs/"
 
 [dependencies]
+async-graphql = {version = "2.9.2", optional = true }
 async-trait = "0.1.50"
 atomic-take = "1.0.0"
 booter = "1.1.0"
@@ -23,7 +24,8 @@ thiserror = "1.0.25"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [features]
-default = ["diesel-loader"]
+default = ["diesel-loader", "graphql"]
+graphql = ["async-graphql"]
 diesel-loader = ["diesel", "diesel-connection"]
 mysql = ["diesel-connection/mysql"]
 postgres = ["diesel-connection/postgres"]
