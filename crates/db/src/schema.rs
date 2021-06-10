@@ -25,8 +25,4 @@ table! {
 joinable!(users_content -> content (content_id));
 joinable!(users_content -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    content,
-    users,
-    users_content,
-);
+allow_tables_to_appear_in_same_query!(content, users, users_content,);

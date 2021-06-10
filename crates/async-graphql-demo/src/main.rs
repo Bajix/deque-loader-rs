@@ -4,18 +4,25 @@ use http::StatusCode;
 use std::convert::Infallible;
 use warp::{http::Response as HttpResponse, Filter, Rejection};
 
+#[macro_use]
+extern crate diesel;
+
+mod data;
 mod schema;
 
-use schema::{EmptyMutation, EmptySubscription, QueryRoot, Schema};
+use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
 
 #[tokio::main]
 async fn main() {
-  let schema: Schema<QueryRoot, EmptyMutation, EmptySubscription> =
-    Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
+  dotenv::dotenv().expect("Unable to find .env file");
+  booter::boot();
+
+  let schema: Schema<QueryRoot, MutationRoot, EmptySubscription> =
+    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish();
 
   let graphql_post = async_graphql_warp::graphql(schema).and_then(
     |(schema, request): (
-      Schema<QueryRoot, EmptyMutation, EmptySubscription>,
+      Schema<QueryRoot, MutationRoot, EmptySubscription>,
       async_graphql::Request,
     )| async move { Ok::<_, Infallible>(Response::from(schema.execute(request).await)) },
   );
