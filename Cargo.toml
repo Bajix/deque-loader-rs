@@ -8,4 +8,5 @@ opt-level = 3
 [workspace]
 members = [
   "channel-loader",
+  "crates/db"
 ]
