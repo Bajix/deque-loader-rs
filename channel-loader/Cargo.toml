@@ -11,11 +11,12 @@ repository = "https://github.com/Bajix/channel-loader-rs/"
 [dependencies]
 async-trait = "0.1.50"
 atomic-take = "1.0.0"
-booter = "1.0.2"
+booter = "1.1.0"
 crossbeam = "0.8.0"
-diesel = {version = "1.4.6", features = ["postgres", "r2d2"], optional = true}
-diesel-connection = {version = "1.0.1", optional = true }
+diesel = {version = "1.4.7", features = ["postgres", "r2d2"], optional = true}
+diesel-connection = {version = "1.0.3", optional = true }
 flume = "0.10.5"
+inventory = "0.1.10"
 itertools = "0.10.0"
 static_init = "1.0.1"
 thiserror = "1.0.25"
