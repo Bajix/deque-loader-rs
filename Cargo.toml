@@ -8,5 +8,6 @@ opt-level = 3
 [workspace]
 members = [
   "channel-loader",
+  "crates/async-graphql-demo",
   "crates/db"
 ]
