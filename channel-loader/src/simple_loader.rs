@@ -55,7 +55,7 @@ where
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{attach_loader, define_static_loader};
+  use crate::{attach_loader, define_static_loader, loadable::Loadable};
   use std::{collections::HashMap, iter};
 
   #[derive(Default)]

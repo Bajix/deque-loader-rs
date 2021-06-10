@@ -13,18 +13,11 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    use $crate::{
-      booter,
-      loadable::Loadable,
-      loader::{DataLoader, StaticLoaderExt},
-      static_init,
-    };
+    #[$crate::static_init::dynamic(0)]
+    static mut LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::new();
 
-    #[static_init::dynamic(0)]
-    static mut LOADER: DataLoader<$loader> = DataLoader::new();
-
-    impl StaticLoaderExt<$loader> for DataLoader<$loader> {
-      fn loader() -> &'static DataLoader<$loader> {
+    impl $crate::loader::StaticLoaderExt<$loader> for $crate::loader::DataLoader<$loader> {
+      fn loader() -> &'static $crate::loader::DataLoader<$loader> {
         booter::assert_booted();
         unsafe { &LOADER }
       }
@@ -33,31 +26,27 @@ macro_rules! define_static_loader {
     // Registered to be called via booter::boot() within main.
     // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
     booter::call_on_boot!({
-      <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
+      <$crate::loader::DataLoader<$loader> as $crate::loader::StaticLoaderExt<$loader>>::loader()
+        .start_detached_reactor();
     });
   };
   ($static_name:ident, $loader:ty) => {
-    use $crate::{
-      booter,
-      loadable::Loadable,
-      loader::{DataLoader, StaticLoaderExt},
-      static_init,
-    };
+    #[$crate::static_init::dynamic(0)]
+    static mut $static_name: $crate::loader::DataLoader<$loader> =
+      $crate::loader::DataLoader::new();
 
-    #[static_init::dynamic(0)]
-    static mut $static_name: DataLoader<$loader> = DataLoader::new();
-
-    impl StaticLoaderExt<$loader> for DataLoader<$loader> {
-      fn loader() -> &'static DataLoader<$loader> {
-        booter::assert_booted();
+    impl $crate::loader::StaticLoaderExt<$loader> for $crate::loader::DataLoader<$loader> {
+      fn loader() -> &'static $crate::loader::DataLoader<$loader> {
+        $crate::booter::assert_booted();
         unsafe { &$static_name }
       }
     }
 
     // Registered to be called via [`booter::boot()`] within main.
     // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
-    booter::call_on_boot!({
-      <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().start_detached_reactor();
+    $crate::booter::call_on_boot!({
+      <$crate::loader::DataLoader<$loader> as $crate::loader::StaticLoaderExt<$loader>>::loader()
+        .start_detached_reactor();
     });
   };
 }
@@ -72,7 +61,7 @@ macro_rules! attach_loader {
       ) -> tokio::sync::oneshot::Receiver<
         Result<Option<<$loader as TaskHandler>::Value>, <$loader as TaskHandler>::Error>,
       > {
-        use $crate::loader::StaticLoaderExt;
+        use $crate::loader::{DataLoader, StaticLoaderExt};
 
         <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().load_by(key)
       }
