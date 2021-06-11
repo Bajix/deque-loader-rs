@@ -1,5 +1,5 @@
 [package]
-authors = ["Thomas Sieverding <Thomas@bajix.com>"]
+authors = [ "Thomas Sieverding <Thomas@bajix.com>" ]
 edition = "2018"
 name = "channel-loader"
 version = "0.1.0-beta.7"
@@ -9,24 +9,24 @@ license = "MIT"
 repository = "https://github.com/Bajix/channel-loader-rs/"
 
 [dependencies]
-async-graphql = {version = "2.9.2", optional = true }
+async-graphql = { version = "2.9.2", optional = true }
 async-trait = "0.1.50"
 atomic-take = "1.0.0"
 booter = "1.1.0"
-crossbeam = "0.8.0"
-diesel = {version = "1.4.7", features = ["postgres", "r2d2"], optional = true}
-diesel-connection = {version = "1.0.3", optional = true }
-flume = "0.10.5"
+crossbeam = "0.8.1"
+diesel = { version = "1.4.7", features = [ "postgres", "r2d2" ], optional = true }
+diesel-connection = { version = "1.0.3", optional = true }
+flume = "0.10.7"
 inventory = "0.1.10"
-itertools = "0.10.0"
+itertools = "0.10.1"
 static_init = "1.0.1"
 thiserror = "1.0.25"
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1.6.1", features = [ "rt", "sync", "time", "macros" ] }
 
 [features]
-default = ["diesel-loader", "graphql"]
-graphql = ["async-graphql"]
-diesel-loader = ["diesel", "diesel-connection"]
-mysql = ["diesel-connection/mysql"]
-postgres = ["diesel-connection/postgres"]
-sqlite = ["diesel-connection/sqlite"]
+default = [ "diesel-loader", "graphql" ]
+graphql = [ "async-graphql" ]
+diesel-loader = [ "diesel", "diesel-connection" ]
+mysql = [ "diesel-connection/mysql" ]
+postgres = [ "diesel-connection/postgres" ]
+sqlite = [ "diesel-connection/sqlite" ]
