@@ -1,12 +1,13 @@
 use crate::{
+  diesel::NotDieselLoader,
   key::Key,
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
-/// a simplified loader interface with automatic task handling
+/// Simplified [`TaskHandler`] implementation useful for whenever task assignment cannot be deferred.
 #[async_trait::async_trait]
-pub trait SimpleWorker: Send + Sync {
+pub trait SimpleLoader: Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
   type Error: Send + Clone + 'static;
@@ -14,26 +15,10 @@ pub trait SimpleWorker: Send + Sync {
   async fn load(keys: Vec<Self::Key>) -> Result<HashMap<Self::Key, Self::Value>, Self::Error>;
 }
 
-/// convenience [`TaskHandler`] wrapper implementation useful for whenever task assignment cannot be deferred.
-pub struct SimpleLoader<T: SimpleWorker> {
-  worker: PhantomData<fn() -> T>,
-}
-
-impl<T> Default for SimpleLoader<T>
-where
-  T: SimpleWorker,
-{
-  fn default() -> Self {
-    SimpleLoader {
-      worker: PhantomData,
-    }
-  }
-}
-
 #[async_trait::async_trait]
-impl<T> TaskHandler for SimpleLoader<T>
+impl<T> TaskHandler for T
 where
-  T: SimpleWorker,
+  T: Default + SimpleLoader + NotDieselLoader + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;
@@ -65,7 +50,7 @@ mod tests {
   pub struct Foo;
 
   #[async_trait::async_trait]
-  impl SimpleWorker for FooLoader {
+  impl SimpleLoader for FooLoader {
     type Key = ();
     type Value = Foo;
     type Error = ();
@@ -79,8 +64,8 @@ mod tests {
     }
   }
 
-  define_static_loader!(SimpleLoader<FooLoader>);
-  attach_loader!(Foo, SimpleLoader<FooLoader>);
+  define_static_loader!(FooLoader);
+  attach_loader!(Foo, FooLoader);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {

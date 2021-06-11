@@ -1,3 +1,5 @@
+#![feature(auto_traits)]
+#![feature(negative_impls)]
 #![allow(dead_code)]
 #[allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
