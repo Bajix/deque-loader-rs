@@ -1,6 +1,5 @@
+use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
-
-use crate::data::{Bookmark, Content, CreateContent, CreateUser, DeletionReceipt, User};
 use channel_loader::diesel::SimpleDieselError;
 use db::schema::{content, users, users_content};
 use diesel::prelude::*;
@@ -45,8 +44,8 @@ impl MutationRoot {
   async fn create_bookmark(
     &self,
     _ctx: &Context<'_>,
-    user_id: i32,
-    content_id: i32,
+    user_id: UserId,
+    content_id: ContentId,
   ) -> FieldResult<Bookmark> {
     let bookmark: Result<Bookmark, SimpleDieselError> = spawn_blocking(move || {
       let conn = get_connection()?;

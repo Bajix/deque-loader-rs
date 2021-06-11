@@ -7,6 +7,12 @@ use warp::{http::Response as HttpResponse, Filter, Rejection};
 #[macro_use]
 extern crate diesel;
 
+#[macro_use]
+extern crate derive_id;
+
+#[macro_use]
+extern crate channel_loader;
+
 mod data;
 mod schema;
 
