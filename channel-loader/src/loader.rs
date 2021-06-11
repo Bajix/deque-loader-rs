@@ -42,6 +42,8 @@ where
   }
 }
 
-pub trait StaticLoaderExt<T: TaskHandler> {
-  fn loader() -> &'static DataLoader<T>;
+pub trait StaticLoaderExt {
+  fn loader() -> &'static DataLoader<Self>
+  where
+    Self: TaskHandler;
 }

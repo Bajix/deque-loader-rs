@@ -3,13 +3,13 @@ use crate::{
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use diesel_connection::{get_connection, PooledConnection};
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 use tokio::task::spawn_blocking;
 
 use super::error::{DieselError, SimpleDieselError};
 
 /// a [`diesel`] specific loader interface designed with that optimizes batching around connection acquisition using [`diesel_connection::get_connection`].
-pub trait DieselWorker: Send + Sync {
+pub trait DieselLoader: Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
   const MAX_BATCH_SIZE: i32 = 100;
@@ -19,26 +19,10 @@ pub trait DieselWorker: Send + Sync {
   ) -> Result<HashMap<Self::Key, Self::Value>, DieselError>;
 }
 
-/// a wrapper type that generically implements [`TaskHandler`] for inner types that implement [`DieselWorker`]
-pub struct DieselLoader<T: DieselWorker> {
-  worker: PhantomData<fn() -> T>,
-}
-
-impl<T> Default for DieselLoader<T>
-where
-  T: DieselWorker,
-{
-  fn default() -> Self {
-    DieselLoader {
-      worker: PhantomData,
-    }
-  }
-}
-
 #[async_trait::async_trait]
-impl<T> TaskHandler for DieselLoader<T>
+impl<T> TaskHandler for T
 where
-  T: DieselWorker + 'static,
+  T: Default + DieselLoader + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;

@@ -13,10 +13,10 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    #[$crate::static_init::dynamic(0)]
+    #[static_init::dynamic(0)]
     static mut LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::new();
 
-    impl $crate::loader::StaticLoaderExt<$loader> for $crate::loader::DataLoader<$loader> {
+    impl $crate::loader::StaticLoaderExt for $loader {
       fn loader() -> &'static $crate::loader::DataLoader<$loader> {
         booter::assert_booted();
         unsafe { &LOADER }
@@ -26,8 +26,7 @@ macro_rules! define_static_loader {
     // Registered to be called via booter::boot() within main.
     // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
     booter::call_on_boot!({
-      <$crate::loader::DataLoader<$loader> as $crate::loader::StaticLoaderExt<$loader>>::loader()
-        .start_detached_reactor();
+      <$loader as $crate::loader::StaticLoaderExt>::loader().start_detached_reactor();
     });
   };
   ($static_name:ident, $loader:ty) => {
@@ -35,7 +34,7 @@ macro_rules! define_static_loader {
     static mut $static_name: $crate::loader::DataLoader<$loader> =
       $crate::loader::DataLoader::new();
 
-    impl $crate::loader::StaticLoaderExt<$loader> for $crate::loader::DataLoader<$loader> {
+    impl $crate::loader::StaticLoaderExt for $loader {
       fn loader() -> &'static $crate::loader::DataLoader<$loader> {
         $crate::booter::assert_booted();
         unsafe { &$static_name }
@@ -45,8 +44,7 @@ macro_rules! define_static_loader {
     // Registered to be called via [`booter::boot()`] within main.
     // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
     $crate::booter::call_on_boot!({
-      <$crate::loader::DataLoader<$loader> as $crate::loader::StaticLoaderExt<$loader>>::loader()
-        .start_detached_reactor();
+      <$loader as $crate::loader::StaticLoaderExt>::loader().start_detached_reactor();
     });
   };
 }
@@ -57,13 +55,16 @@ macro_rules! attach_loader {
   ($loadable:ty, $loader:ty) => {
     impl $crate::loadable::Loadable<$loader> for $loadable {
       fn load_by(
-        key: <$loader as TaskHandler>::Key,
+        key: <$loader as $crate::task::TaskHandler>::Key,
       ) -> tokio::sync::oneshot::Receiver<
-        Result<Option<<$loader as TaskHandler>::Value>, <$loader as TaskHandler>::Error>,
+        Result<
+          Option<<$loader as $crate::task::TaskHandler>::Value>,
+          <$loader as $crate::task::TaskHandler>::Error,
+        >,
       > {
-        use $crate::loader::{DataLoader, StaticLoaderExt};
+        use $crate::loader::StaticLoaderExt;
 
-        <DataLoader<$loader> as StaticLoaderExt<$loader>>::loader().load_by(key)
+        <$loader as StaticLoaderExt>::loader().load_by(key)
       }
     }
   };
