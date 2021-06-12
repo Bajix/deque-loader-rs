@@ -1,4 +1,7 @@
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql::{
+  extensions::ApolloTracing,
+  http::{playground_source, GraphQLPlaygroundConfig},
+};
 use async_graphql_warp::{BadRequest, Response};
 use http::StatusCode;
 use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
@@ -25,7 +28,9 @@ async fn main() {
   booter::boot();
 
   let schema: Schema<QueryRoot, MutationRoot, EmptySubscription> =
-    Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish();
+    Schema::build(QueryRoot, MutationRoot, EmptySubscription)
+      .extension(ApolloTracing)
+      .finish();
 
   let graphql_post = async_graphql_warp::graphql(schema).and_then(
     |(schema, request): (
