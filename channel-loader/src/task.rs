@@ -4,6 +4,7 @@ use crossbeam::{
   deque::{Steal, Stealer},
 };
 use itertools::Itertools;
+use log::trace;
 use std::{
   collections::{HashMap, HashSet},
   marker::PhantomData,
@@ -72,6 +73,7 @@ where
     let mut keys: HashSet<T::Key> = HashSet::new();
     let mut requests: Vec<Request<T>> = Vec::with_capacity(T::MAX_BATCH_SIZE as usize);
     let mut received_count = 0;
+    let mut cancelled_count = 0;
 
     loop {
       if keys.len().ge(&(T::MAX_BATCH_SIZE as usize)) {
@@ -82,7 +84,9 @@ where
         Steal::Success(req) => {
           received_count += 1;
 
-          if !req.tx.is_closed() {
+          if req.tx.is_closed() {
+            cancelled_count += 1;
+          } else {
             keys.insert(req.key.clone());
             requests.push(req);
           }
@@ -98,8 +102,18 @@ where
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
       requests.shrink_to_fit();
 
+      trace!(
+        "{:?} assigned {} requests across {} keys; {} cancellations",
+        core::any::type_name::<T>(),
+        requests.len(),
+        keys.len(),
+        cancelled_count
+      );
+
       TaskAssignment::LoadBatch(Task::from_requests(requests))
     } else {
+      trace!("{:?} assignment cancelled", core::any::type_name::<T>());
+
       TaskAssignment::NoAssignment(Task::resolve_receipt())
     }
   }

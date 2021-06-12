@@ -1,26 +1,27 @@
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_warp::{BadRequest, Response};
 use http::StatusCode;
+use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
 use std::convert::Infallible;
 use warp::{http::Response as HttpResponse, Filter, Rejection};
 
 #[macro_use]
 extern crate diesel;
-
 #[macro_use]
 extern crate derive_id;
-
 #[macro_use]
 extern crate channel_loader;
+
+extern crate log;
+extern crate pretty_env_logger;
 
 mod data;
 mod schema;
 
-use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
-
 #[tokio::main]
 async fn main() {
   dotenv::dotenv().expect("Unable to find .env file");
+  pretty_env_logger::init();
   booter::boot();
 
   let schema: Schema<QueryRoot, MutationRoot, EmptySubscription> =
