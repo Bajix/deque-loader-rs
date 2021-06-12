@@ -57,15 +57,15 @@ impl DieselLoader for UserLoader {
     conn: PooledConnection,
     keys: Vec<UserId>,
   ) -> Result<HashMap<Self::Key, Self::Value>, DieselError> {
-    let bookmarks: Vec<User> = User::belonging_to(&keys)
+    let users: Vec<User> = User::belonging_to(&keys)
       .select(users::all_columns)
       .load::<User>(&conn)?;
 
-    let grouped_bookmarks = bookmarks.grouped_by(&keys);
+    let grouped_users = users.grouped_by(&keys);
 
     let mut data: HashMap<UserId, Vec<User>> = HashMap::new();
 
-    data.extend(keys.into_iter().zip(grouped_bookmarks.into_iter()));
+    data.extend(keys.into_iter().zip(grouped_users.into_iter()));
 
     Ok(data)
   }
