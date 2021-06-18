@@ -17,6 +17,7 @@ crossbeam = "0.8.1"
 diesel = { version = "1.4.7", features = [ "postgres", "r2d2" ], optional = true }
 diesel-connection = { version = "1.0.3", optional = true }
 flume = "0.10.7"
+futures = "0.3.15"
 inventory = "0.1.10"
 itertools = "0.10.1"
 log = "0.4.14"

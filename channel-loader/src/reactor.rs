@@ -4,6 +4,7 @@ use crate::{
 };
 use crossbeam::{atomic::AtomicCell, deque::Worker};
 use flume::Receiver;
+use futures::{prelude::*, select};
 use log::trace;
 use std::sync::Arc;
 
@@ -16,6 +17,7 @@ enum ReactorState {
   Idle,
   Draining,
   Yielding,
+  Flushing,
 }
 
 /// capacity aware task-scheduler
@@ -52,7 +54,13 @@ where
       let signal = match &self.state {
         ReactorState::Idle => self.rx.recv_async().await.ok(),
         ReactorState::Draining => self.rx.try_recv().ok(),
-        ReactorState::Yielding => self.rx.try_recv().ok(),
+        ReactorState::Yielding => {
+          select! {
+            signal = self.rx.recv_async() => signal.ok(),
+            signal = tokio::task::yield_now().map(|_| None) => signal
+          }
+        }
+        ReactorState::Flushing => self.rx.try_recv().ok(),
       };
 
       match signal {
@@ -66,8 +74,12 @@ where
             .lt(&T::MAX_BATCH_SIZE.saturating_neg())
           {
             self.spawn_loader();
-          } else if matches!(&self.state, &ReactorState::Idle) {
-            self.state = ReactorState::Draining;
+          } else {
+            match &self.state {
+              &ReactorState::Idle => self.state = ReactorState::Draining,
+              &ReactorState::Yielding => self.state = ReactorState::Flushing,
+              _ => (),
+            };
           }
         }
         None => {
@@ -79,18 +91,20 @@ where
           );
           collected_batch_size = 0;
 
-          if matches!(&self.state, &ReactorState::Yielding) {
-            self.state = ReactorState::Idle;
-            if self.scheduled_capacity.load().is_negative() {
-              self.spawn_loader();
+          match &self.state {
+            &ReactorState::Idle => unreachable!(),
+            &ReactorState::Draining => self.state = ReactorState::Yielding,
+            _ => {
+              if self.scheduled_capacity.load().is_negative() {
+                trace!(
+                  "{:?} scheduled loader after yield",
+                  core::any::type_name::<T>()
+                );
+                self.spawn_loader();
+              }
+              self.state = ReactorState::Idle;
             }
-          } else {
-            self.state = ReactorState::Yielding;
-
-            // I believe it to be the case that this yield is unecessary and I have seen no actual evidence to suggest keeping this will improve batching behavior.
-            // Please report back if you have a use case that results in any messages whatsoever being captured while yielding, otherwise this will be removed
-            tokio::task::yield_now().await;
-          }
+          };
         }
       }
     }

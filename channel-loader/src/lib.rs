@@ -49,7 +49,6 @@
 //! attach_loader!(User, UserLoader);
 //! ```
 
-
 #![allow(dead_code)]
 #[allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
