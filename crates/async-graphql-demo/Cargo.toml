@@ -7,14 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-graphql = {version = "2.9.2", features = ["apollo_tracing"]}
-async-graphql-warp = "2.9.2"
-booter = "1.1.0"
+async-graphql = {version = "2.9.3", features = ["apollo_tracing"]}
+async-graphql-warp = "2.9.3"
+booter = "1.1.1"
 channel-loader = { path = "../../channel-loader" }
 db = { path = "../db" }
 derive-id = "0.1.6"
 diesel = { version = "1.4.7", features = [ "postgres", "chrono", "r2d2" ] }
-diesel-connection = "1.0.3"
+diesel-connection = "1.0.4"
 dotenv = "0.15.0"
 http = "0.2.4"
 inventory = "0.1.10"
@@ -22,5 +22,6 @@ log = "0.4.14"
 pretty_env_logger = "0.4.0"
 serde = "1.0.126"
 static_init = "1.0.1"
-tokio = { version = "1.6.1", features = [ "macros", "rt-multi-thread" ] }
+tokio = { version = "1.7.0", features = [ "macros", "rt-multi-thread" ] }
 warp = "0.3.1"
+
