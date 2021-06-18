@@ -1,10 +1,6 @@
 use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
 use channel_loader::{diesel::SimpleDieselError, Loadable};
-use db::schema::users;
-use diesel::prelude::*;
-use diesel_connection::get_connection;
-use tokio::task::spawn_blocking;
 
 #[derive(Default)]
 pub struct QueryRoot;
@@ -16,20 +12,13 @@ impl QueryRoot {
   }
 
   async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Vec<User>> {
-    let users: Result<Vec<User>, SimpleDieselError> = spawn_blocking(move || {
-      let conn = get_connection()?;
+    let users = <User as Loadable<UsersLoader>>::load_by(())
+      .await
+      .unwrap()
+      .map_err(|err: SimpleDieselError| err.extend())?
+      .unwrap_or_else(|| vec![]);
 
-      let users = users::table
-        .limit(50)
-        .select(users::all_columns)
-        .get_results::<User>(&conn)?;
-
-      Ok(users)
-    })
-    .await
-    .unwrap();
-
-    users.map_err(|err| err.extend())
+    Ok(users)
   }
 
   async fn user_bookmarks(

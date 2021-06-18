@@ -72,5 +72,32 @@ impl DieselLoader for UserLoader {
   }
 }
 
-define_static_loader!(UserLoader);
+define_static_loader!(USER_LOADER, UserLoader);
 attach_loader!(User, UserLoader);
+
+#[derive(Default)]
+pub struct UsersLoader;
+
+impl DieselLoader for UsersLoader {
+  type Key = ();
+  type Value = Vec<User>;
+  const MAX_BATCH_SIZE: i32 = 500;
+  fn load(
+    conn: PooledConnection,
+    _: Vec<()>,
+  ) -> Result<HashMap<Self::Key, Self::Value>, DieselError> {
+    let users = users::table
+      .limit(50)
+      .select(users::all_columns)
+      .get_results::<User>(&conn)?;
+
+    let mut data: HashMap<(), Vec<User>> = HashMap::new();
+
+    data.insert((), users);
+
+    Ok(data)
+  }
+}
+
+define_static_loader!(USERS_LOADER, UsersLoader);
+attach_loader!(User, UsersLoader);
