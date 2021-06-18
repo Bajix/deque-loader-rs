@@ -53,6 +53,7 @@ pub struct UserLoader;
 impl DieselLoader for UserLoader {
   type Key = UserId;
   type Value = Vec<User>;
+  const MAX_BATCH_SIZE: i32 = 500;
   fn load(
     conn: PooledConnection,
     keys: Vec<UserId>,

@@ -15,12 +15,12 @@ impl QueryRoot {
     200
   }
 
-  // This is intentionally super innefficient and is only useful for firehose testing how well batching works. Use cursors in a real API
   async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Vec<User>> {
     let users: Result<Vec<User>, SimpleDieselError> = spawn_blocking(move || {
       let conn = get_connection()?;
 
       let users = users::table
+        .limit(50)
         .select(users::all_columns)
         .get_results::<User>(&conn)?;
 
