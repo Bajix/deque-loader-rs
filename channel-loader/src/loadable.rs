@@ -13,39 +13,28 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    #[static_init::dynamic(0)]
-    static mut LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::new();
-
-    impl $crate::loader::StaticLoaderExt for $loader {
-      fn loader() -> &'static $crate::loader::DataLoader<$loader> {
-        booter::assert_booted();
-        unsafe { &LOADER }
-      }
+    thread_local! {
+      static LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::new();
     }
 
-    // Registered to be called via booter::boot() within main.
-    // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
-    booter::call_on_boot!({
-      <$loader as $crate::loader::StaticLoaderExt>::loader().start_detached_reactor();
-    });
+    impl $crate::loader::StaticLoaderExt for $loader {
+      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
+        &LOADER
+      }
+    }
   };
-  ($static_name:ident, $loader:ty) => {
-    #[$crate::static_init::dynamic(0)]
-    static mut $static_name: $crate::loader::DataLoader<$loader> =
-      $crate::loader::DataLoader::new();
 
-    impl $crate::loader::StaticLoaderExt for $loader {
-      fn loader() -> &'static $crate::loader::DataLoader<$loader> {
-        $crate::booter::assert_booted();
-        unsafe { &$static_name }
-      }
+  ($static_name:ident, $loader:ty) => {
+    thread_local! {
+      static $static_name: $crate::loader::DataLoader<$loader> =
+      $crate::loader::DataLoader::new();
     }
 
-    // Registered to be called via [`booter::boot()`] within main.
-    // [`booter::assert_booted()`] ensures correct usage for non-release builds via panics, enforcing mandatory usage
-    $crate::booter::call_on_boot!({
-      <$loader as $crate::loader::StaticLoaderExt>::loader().start_detached_reactor();
-    });
+    impl $crate::loader::StaticLoaderExt for $loader {
+      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
+        &$static_name
+      }
+    }
   };
 }
 
@@ -64,7 +53,7 @@ macro_rules! attach_loader {
       > {
         use $crate::loader::StaticLoaderExt;
 
-        <$loader as StaticLoaderExt>::loader().load_by(key)
+        <$loader as StaticLoaderExt>::loader().with(|loader| loader.load_by(key))
       }
     }
   };
