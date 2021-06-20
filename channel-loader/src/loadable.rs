@@ -24,15 +24,15 @@ macro_rules! define_static_loader {
     }
   };
 
-  ($static_name:ident, $loader:ty) => {
+  ($loader_name:ident, $loader:ty) => {
     thread_local! {
-      static $static_name: $crate::loader::DataLoader<$loader> =
+      static $loader_name: $crate::loader::DataLoader<$loader> =
       $crate::loader::DataLoader::new();
     }
 
     impl $crate::loader::StaticLoaderExt for $loader {
       fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
-        &$static_name
+        &$loader_name
       }
     }
   };
@@ -104,8 +104,6 @@ mod tests {
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {
-    booter::boot();
-
     let data = BatchSize::load_by(1_i32).await.unwrap()?;
 
     assert!(data.is_some());
@@ -115,8 +113,6 @@ mod tests {
 
   #[tokio::test]
   async fn it_auto_batches() -> Result<(), ()> {
-    booter::boot();
-
     let a = BatchSize::load_by(2_i32);
 
     let _b = BatchSize::load_by(3_i32);

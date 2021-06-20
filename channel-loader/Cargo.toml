@@ -2,7 +2,7 @@
 authors = [ "Thomas Sieverding <Thomas@bajix.com>" ]
 edition = "2018"
 name = "channel-loader"
-version = "0.1.0-beta.9"
+version = "0.1.0-beta.10"
 description = "A channel based solution designed for efficient data loading"
 readme = "../README.md"
 license = "MIT"
@@ -11,19 +11,13 @@ repository = "https://github.com/Bajix/channel-loader-rs/"
 [dependencies]
 async-graphql = { version = "2.9.3", optional = true }
 async-trait = "0.1.50"
-atomic-take = "1.0.0"
-booter = "1.1.1"
 crossbeam = "0.8.1"
 diesel = { version = "1.4.7", features = [ "postgres", "r2d2" ], optional = true }
 diesel-connection = { version = "1.0.4", optional = true }
-flume = "0.10.7"
-futures = "0.3.15"
-inventory = "0.1.10"
 itertools = "0.10.1"
 log = "0.4.14"
-static_init = "1.0.1"
 thiserror = "1.0.25"
-tokio = { version = "1.7.0", features = [ "rt", "sync", "time", "macros" ] }
+tokio = { version = "1.7.1", features = [ "rt", "sync", "time", "macros" ] }
 
 [features]
 default = [ "diesel-loader", "graphql" ]
@@ -32,3 +26,6 @@ diesel-loader = [ "diesel", "diesel-connection" ]
 mysql = [ "diesel-connection/mysql" ]
 postgres = [ "diesel-connection/postgres" ]
 sqlite = [ "diesel-connection/sqlite" ]
+
+[lib]
+doctest = false

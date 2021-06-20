@@ -1,4 +1,4 @@
-use crate::{key::Key, reactor::RequestReactor, request::Request};
+use crate::{key::Key, request::Request};
 use crossbeam::{
   atomic::AtomicCell,
   deque::{Steal, Stealer},
@@ -24,7 +24,7 @@ pub trait TaskHandler: Default + Send + Sync {
 pub struct Task<T>(T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
-  reactor_capacity: Arc<AtomicCell<i32>>,
+  load_capacity: Arc<AtomicCell<i32>>,
   stealer: Stealer<Request<T>>,
 }
 
@@ -51,14 +51,11 @@ where
   T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn fork_from_reactor(reactor: &RequestReactor<T>) -> Self {
-    let reactor_capacity = reactor.scheduled_capacity.clone();
-    let stealer = reactor.queue.stealer();
-
-    reactor_capacity.fetch_add(T::MAX_BATCH_SIZE);
+  pub(crate) fn new(load_capacity: Arc<AtomicCell<i32>>, stealer: Stealer<Request<T>>) -> Self {
+    load_capacity.fetch_add(T::MAX_BATCH_SIZE);
 
     Task(PendingAssignment {
-      reactor_capacity,
+      load_capacity,
       stealer,
     })
   }
@@ -66,7 +63,7 @@ where
   // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
   pub fn get_assignment(self) -> TaskAssignment<T> {
     let Task(PendingAssignment {
-      reactor_capacity,
+      load_capacity,
       stealer,
     }) = self;
 
@@ -96,7 +93,25 @@ where
       };
     }
 
-    reactor_capacity.fetch_sub(T::MAX_BATCH_SIZE - received_count);
+    let unfulfilled_capacity = T::MAX_BATCH_SIZE - received_count;
+
+    let prior_capacity = load_capacity.fetch_sub(unfulfilled_capacity);
+
+    if (prior_capacity - unfulfilled_capacity).is_negative() {
+      loop {
+        match stealer.steal() {
+          Steal::Success(req) => {
+            load_capacity.fetch_add(1);
+
+            if !req.tx.is_closed() {
+              requests.push(req);
+            }
+          }
+          Steal::Retry => continue,
+          Steal::Empty => break,
+        };
+      }
+    }
 
     if requests.len().gt(&0) {
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
