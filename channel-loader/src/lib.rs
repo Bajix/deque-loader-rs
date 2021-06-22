@@ -4,7 +4,7 @@
 //! use db::schema::users;
 //! use diesel::prelude::*;
 //! use diesel_connection::PooledConnection;
-//! use std::collections::HashMap;
+//! use std::{collections::HashMap, sync::Arc};
 //!
 //! derive_id! {
 //!   #[derive(Identifiable)]
@@ -26,31 +26,37 @@
 //!
 //! impl DieselLoader for UserLoader {
 //!   type Key = UserId;
-//!   type Value = Vec<User>;
+//!   type Value = User;
 //!   fn load(
 //!     conn: PooledConnection,
 //!     keys: Vec<UserId>,
-//!   ) -> Result<HashMap<Self::Key, Self::Value>, DieselError> {
+//!   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
 //!     let users: Vec<User> = User::belonging_to(&keys)
 //!       .select(users::all_columns)
 //!       .load::<User>(&conn)?;
 //!
-//!     let grouped_users = users.grouped_by(&keys);
+//!     let users = users.into_iter().map(Arc::new);
 //!
-//!     let mut data: HashMap<UserId, Vec<User>> = HashMap::new();
+//!     let mut data: HashMap<UserId, Arc<User>> = HashMap::new();
 //!
-//!     data.extend(keys.into_iter().zip(grouped_users.into_iter()));
+//!     data.extend(keys.into_iter().zip(users));
 //!
 //!     Ok(data)
 //!   }
 //! }
 //!
-//! define_static_loader!(UserLoader);
+//! define_static_loader!(USER, UserLoader);
 //! attach_loader!(User, UserLoader);
 //! ```
 
 #![allow(dead_code)]
+#[doc(hidden)]
+pub extern crate crossbeam;
 #[allow(rustdoc::private_intra_doc_links)]
+#[doc(hidden)]
+pub extern crate paste;
+#[doc(hidden)]
+pub extern crate static_init;
 #[cfg(feature = "diesel-loader")]
 pub mod diesel;
 mod key;
@@ -58,7 +64,8 @@ mod key;
 pub mod loadable;
 #[doc(hidden)]
 pub mod loader;
-mod request;
+#[doc(hidden)]
+pub mod request;
 pub mod task;
 
 pub use key::Key;

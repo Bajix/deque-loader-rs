@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
 use channel_loader::{diesel::SimpleDieselError, Loadable};
@@ -11,12 +13,12 @@ impl QueryRoot {
     200
   }
 
-  async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Vec<User>> {
+  async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Arc<Vec<User>>> {
     let users = <User as Loadable<UsersLoader>>::load_by(())
       .await
       .unwrap()
       .map_err(|err: SimpleDieselError| err.extend())?
-      .unwrap_or_else(|| vec![]);
+      .unwrap_or_else(|| Arc::new(vec![]));
 
     Ok(users)
   }
@@ -25,12 +27,12 @@ impl QueryRoot {
     &self,
     _ctx: &Context<'_>,
     user_id: UserId,
-  ) -> FieldResult<Vec<Bookmark>> {
+  ) -> FieldResult<Arc<Vec<Bookmark>>> {
     let bookmarks = Bookmark::load_by(user_id)
       .await
       .unwrap()
       .map_err(|err| err.extend())?
-      .unwrap_or_else(|| vec![]);
+      .unwrap_or_else(|| Arc::new(vec![]));
 
     Ok(bookmarks)
   }

@@ -1,9 +1,10 @@
 use crate::{
   key::Key,
+  loader::StaticLoaderExt,
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use diesel_connection::{get_connection, PooledConnection};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tokio::task::spawn_blocking;
 
 use super::error::{DieselError, SimpleDieselError};
@@ -12,17 +13,17 @@ use super::error::{DieselError, SimpleDieselError};
 pub trait DieselLoader: Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 100;
+  const MAX_BATCH_SIZE: i32 = 2000;
   fn load(
     conn: PooledConnection,
     keys: Vec<Self::Key>,
-  ) -> Result<HashMap<Self::Key, Self::Value>, DieselError>;
+  ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError>;
 }
 
 #[async_trait::async_trait]
 impl<T> TaskHandler for T
 where
-  T: Default + DieselLoader + 'static,
+  T: StaticLoaderExt + Default + DieselLoader + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;

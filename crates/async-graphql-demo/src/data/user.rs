@@ -8,7 +8,7 @@ use channel_loader::{
 use db::schema::users;
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use super::Bookmark;
 
@@ -36,12 +36,12 @@ pub struct User {
 
 #[ComplexObject]
 impl User {
-  async fn bookmarks(&self, _ctx: &Context<'_>) -> FieldResult<Vec<Bookmark>> {
+  async fn bookmarks(&self, _ctx: &Context<'_>) -> FieldResult<Arc<Vec<Bookmark>>> {
     let bookmarks = Bookmark::load_by(UserId::from(self.id))
       .await
       .unwrap()
       .map_err(|err| err.extend())?
-      .unwrap_or_else(|| vec![]);
+      .unwrap_or_else(|| Arc::new(vec![]));
 
     Ok(bookmarks)
   }
@@ -52,27 +52,27 @@ pub struct UserLoader;
 
 impl DieselLoader for UserLoader {
   type Key = UserId;
-  type Value = Vec<User>;
-  const MAX_BATCH_SIZE: i32 = 500;
+  type Value = User;
+  const MAX_BATCH_SIZE: i32 = 2000;
   fn load(
     conn: PooledConnection,
     keys: Vec<UserId>,
-  ) -> Result<HashMap<Self::Key, Self::Value>, DieselError> {
+  ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
     let users: Vec<User> = User::belonging_to(&keys)
       .select(users::all_columns)
       .load::<User>(&conn)?;
 
-    let grouped_users = users.grouped_by(&keys);
+    let users = users.into_iter().map(Arc::new);
 
-    let mut data: HashMap<UserId, Vec<User>> = HashMap::new();
+    let mut data: HashMap<UserId, Arc<User>> = HashMap::new();
 
-    data.extend(keys.into_iter().zip(grouped_users.into_iter()));
+    data.extend(keys.into_iter().zip(users));
 
     Ok(data)
   }
 }
 
-define_static_loader!(USER_LOADER, UserLoader);
+define_static_loader!(USER, UserLoader);
 attach_loader!(User, UserLoader);
 
 #[derive(Default)]
@@ -81,23 +81,23 @@ pub struct UsersLoader;
 impl DieselLoader for UsersLoader {
   type Key = ();
   type Value = Vec<User>;
-  const MAX_BATCH_SIZE: i32 = 500;
+  const MAX_BATCH_SIZE: i32 = 2000;
   fn load(
     conn: PooledConnection,
     _: Vec<()>,
-  ) -> Result<HashMap<Self::Key, Self::Value>, DieselError> {
+  ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
     let users = users::table
       .limit(50)
       .select(users::all_columns)
       .get_results::<User>(&conn)?;
 
-    let mut data: HashMap<(), Vec<User>> = HashMap::new();
+    let mut data: HashMap<(), Arc<Vec<User>>> = HashMap::new();
 
-    data.insert((), users);
+    data.insert((), Arc::new(users));
 
     Ok(data)
   }
 }
 
-define_static_loader!(USERS_LOADER, UsersLoader);
+define_static_loader!(USERS, UsersLoader);
 attach_loader!(User, UsersLoader);

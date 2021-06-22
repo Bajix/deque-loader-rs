@@ -1,31 +1,28 @@
-use crate::{key::Key, request::Request};
-use crossbeam::{
-  atomic::AtomicCell,
-  deque::{Steal, Stealer},
-};
+use crate::{key::Key, loader::StaticLoaderExt, request::Request};
+use crossbeam::deque::{Steal, Stealer};
 use itertools::Itertools;
 use log::trace;
 use std::{
   collections::{HashMap, HashSet},
   marker::PhantomData,
-  sync::Arc,
+  sync::{Arc, RwLockReadGuard},
 };
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work consolidation
 #[async_trait::async_trait]
-pub trait TaskHandler: Default + Send + Sync {
+pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
   type Error: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 100;
+  const MAX_BATCH_SIZE: i32 = 2000;
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
 }
 
 pub struct Task<T>(T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
-  load_capacity: Arc<AtomicCell<i32>>,
-  stealer: Stealer<Request<T>>,
+  stealer_index: usize,
+  loader: PhantomData<fn() -> T>,
 }
 
 /// A batch of load requests, unique by key, to be loaded and the result resolved
@@ -51,78 +48,86 @@ where
   T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn new(load_capacity: Arc<AtomicCell<i32>>, stealer: Stealer<Request<T>>) -> Self {
-    load_capacity.fetch_add(T::MAX_BATCH_SIZE);
+  pub(crate) fn new(stealer_index: usize) -> Self {
+    T::load_capacity().fetch_add(T::MAX_BATCH_SIZE);
 
     Task(PendingAssignment {
-      load_capacity,
-      stealer,
+      stealer_index,
+      loader: PhantomData,
     })
+  }
+
+  /// Steal a task by cycling through queues, starting at the index associated with the queue's task spawner. This maximizes colocality of loads enqueued together
+  pub fn get_task<'a>(
+    &self,
+    stealers: &'a RwLockReadGuard<Vec<Stealer<Request<T>>>>,
+  ) -> Option<Request<T>> {
+    // We intentionally take all requests from a given stealer before taking any from the next
+    for stealer in stealers
+      .iter()
+      .skip(self.0.stealer_index)
+      .chain(stealers.iter().take(self.0.stealer_index))
+    {
+      loop {
+        match stealer.steal() {
+          Steal::Success(req) => return Some(req),
+          Steal::Retry => continue,
+          Steal::Empty => break,
+        }
+      }
+    }
+    None
   }
 
   // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
   pub fn get_assignment(self) -> TaskAssignment<T> {
-    let Task(PendingAssignment {
-      load_capacity,
-      stealer,
-    }) = self;
-
+    let stealers = T::task_stealers();
     let mut keys: HashSet<T::Key> = HashSet::new();
-    let mut requests: Vec<Request<T>> = Vec::with_capacity(T::MAX_BATCH_SIZE as usize);
+    let mut requests: Vec<Request<T>> = Vec::new();
     let mut received_count = 0;
-    let mut cancelled_count = 0;
 
-    loop {
-      if keys.len().ge(&(T::MAX_BATCH_SIZE as usize)) {
-        break;
-      }
+    while keys.len().ge(&(T::MAX_BATCH_SIZE as usize)) {
+      if let Some(req) = self.get_task(&stealers) {
+        received_count += 1;
 
-      match stealer.steal() {
-        Steal::Success(req) => {
-          received_count += 1;
-
-          if req.tx.is_closed() {
-            cancelled_count += 1;
-          } else {
-            keys.insert(req.key.clone());
-            requests.push(req);
-          }
+        if !req.tx.is_closed() {
+          keys.insert(req.key.clone());
+          requests.push(req);
         }
-        Steal::Retry => continue,
-        Steal::Empty => break,
+      } else {
+        break;
       };
     }
 
     let unfulfilled_capacity = T::MAX_BATCH_SIZE - received_count;
 
-    let prior_capacity = load_capacity.fetch_sub(unfulfilled_capacity);
+    let prior_capacity = T::load_capacity().fetch_sub(unfulfilled_capacity);
 
     if (prior_capacity - unfulfilled_capacity).is_negative() {
       loop {
-        match stealer.steal() {
-          Steal::Success(req) => {
-            load_capacity.fetch_add(1);
-
-            if !req.tx.is_closed() {
-              requests.push(req);
-            }
+        if let Some(req) = self.get_task(&stealers) {
+          if !req.tx.is_closed() {
+            keys.insert(req.key.clone());
+            requests.push(req);
           }
-          Steal::Retry => continue,
-          Steal::Empty => break,
-        };
+
+          if T::load_capacity().fetch_add(1).eq(&-1) {
+            break;
+          }
+        } else {
+          break;
+        }
       }
     }
 
     if requests.len().gt(&0) {
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
-      requests.shrink_to_fit();
 
       trace!(
-        "{:?} assigned {} requests across {} keys; {} cancellations",
+        "{:?} assigned {} requests across {} keys",
         core::any::type_name::<T>(),
         requests.len(),
-        keys.len(),
-        cancelled_count
+        keys.len()
       );
 
       TaskAssignment::LoadBatch(Task::from_requests(requests))
@@ -156,7 +161,7 @@ where
   #[must_use]
   pub fn resolve(
     self,
-    results: Result<HashMap<T::Key, T::Value>, T::Error>,
+    results: Result<HashMap<T::Key, Arc<T::Value>>, T::Error>,
   ) -> Task<CompletionReceipt<T>> {
     let Task(LoadBatch { requests }) = self;
 
@@ -178,7 +183,7 @@ where
 
           let value = match can_take_value {
             true => values.remove(&req.key),
-            false => values.get(&req.key).map(|value| value.to_owned()),
+            false => values.get(&req.key).cloned(),
           };
 
           req.resolve(Ok(value));
