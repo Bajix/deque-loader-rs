@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/Bajix/channel-loader-rs/"
 
 [dependencies]
-async-graphql = { version = "2.9.3", optional = true }
+async-graphql = { version = "2.9.4", optional = true }
 async-trait = "0.1.50"
 crossbeam = "0.8.1"
 diesel = { version = "1.4.7", features = [ "postgres", "r2d2" ], optional = true }
