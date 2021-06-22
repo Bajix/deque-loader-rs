@@ -10,11 +10,11 @@ edition = "2018"
 async-graphql = {version = "2.9.3", features = ["apollo_tracing"]}
 async-graphql-warp = "2.9.3"
 booter = "1.1.1"
-channel-loader = { path = "../../channel-loader" }
+channel-loader = { path = "../../channel-loader", features = ["postgres", "tracing"]}
 db = { path = "../db" }
 derive-id = "0.1.6"
 diesel = { version = "1.4.7", features = [ "postgres", "chrono", "r2d2" ] }
-diesel-connection = "1.0.4"
+diesel-connection = { version = "1.0.5", features = ["postgres", "tracing"] }
 dotenv = "0.15.0"
 http = "0.2.4"
 inventory = "0.1.10"
