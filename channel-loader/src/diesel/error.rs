@@ -115,16 +115,16 @@ impl From<DatabaseErrorKind> for SimpleDieselError {
 impl async_graphql::ErrorExtensions for SimpleDieselError {
   fn extend(&self) -> async_graphql::FieldError {
     self.extend_with(|err, e| match err {
-      SimpleDieselError::Forbidden => e.set("code", "Forbidden"),
-      SimpleDieselError::Unauthorized => e.set("code", "Unauthorized"),
-      SimpleDieselError::NotFound => e.set("code", "NotFound"),
-      SimpleDieselError::BadConnection => e.set("code", "BadConnection"),
-      SimpleDieselError::InvalidConnection => e.set("code", "InvalidConnection"),
-      SimpleDieselError::RollbackTransaction => e.set("code", "RollbackTransaction"),
-      SimpleDieselError::UniqueViolation => e.set("code", "UniqueViolation"),
-      SimpleDieselError::ForeignKeyViolation => e.set("code", "ForeignKeyViolation"),
-      SimpleDieselError::ConnectionTimeout => e.set("code", "ConnectionTimeout"),
-      SimpleDieselError::DatabaseError => e.set("code", "DatabaseError"),
+      SimpleDieselError::Forbidden => e.set("code", "FORBIDDEN"),
+      SimpleDieselError::Unauthorized => e.set("code", "UNAUTHORIZED"),
+      SimpleDieselError::NotFound => e.set("code", "NOT_FOUND"),
+      SimpleDieselError::BadConnection => e.set("code", "BAD_CONNECTION"),
+      SimpleDieselError::InvalidConnection => e.set("code", "INVALID_CONNECTION"),
+      SimpleDieselError::RollbackTransaction => e.set("code", "ROLLBACK_TRANSACTION"),
+      SimpleDieselError::UniqueViolation => e.set("code", "UNIQUE_VIOLATION"),
+      SimpleDieselError::ForeignKeyViolation => e.set("code", "FOREIGN_KEY_VIOLATION"),
+      SimpleDieselError::ConnectionTimeout => e.set("code", "CONNECTION_TIMEOUT"),
+      SimpleDieselError::DatabaseError => e.set("code", "DATABASE_ERROR"),
     })
   }
 }
