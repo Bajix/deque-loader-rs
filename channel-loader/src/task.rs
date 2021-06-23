@@ -52,8 +52,8 @@ where
   pub fn collect_tasks() -> Vec<Request<T>> {
     T::task_stealers()
       .clone()
-      .into_par_iter()
-      .flat_map_iter(|stealer| {
+      .into_iter()
+      .flat_map(|stealer| {
         std::iter::from_fn(move || loop {
           match stealer.steal() {
             Steal::Success(req) => break Some(req),
