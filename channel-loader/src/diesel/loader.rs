@@ -13,7 +13,6 @@ use super::error::{DieselError, SimpleDieselError};
 pub trait DieselLoader: Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 2000;
   fn load(
     conn: PooledConnection,
     keys: Vec<Self::Key>,
@@ -28,7 +27,6 @@ where
   type Key = T::Key;
   type Value = T::Value;
   type Error = SimpleDieselError;
-  const MAX_BATCH_SIZE: i32 = T::MAX_BATCH_SIZE;
 
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
     spawn_blocking(move || {

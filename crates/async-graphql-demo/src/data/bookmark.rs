@@ -23,7 +23,6 @@ pub struct BookmarkLoader;
 impl DieselLoader for BookmarkLoader {
   type Key = UserId;
   type Value = Vec<Bookmark>;
-  const MAX_BATCH_SIZE: i32 = 2000;
   fn load(
     conn: PooledConnection,
     keys: Vec<UserId>,

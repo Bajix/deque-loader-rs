@@ -3,7 +3,7 @@ use crossbeam::deque::{Steal, Stealer};
 use itertools::Itertools;
 use log::trace;
 use std::{
-  collections::{HashMap, HashSet},
+  collections::HashMap,
   marker::PhantomData,
   sync::{Arc, RwLockReadGuard},
 };
@@ -14,7 +14,6 @@ pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
   type Key: Key;
   type Value: Send + Clone + 'static;
   type Error: Send + Clone + 'static;
-  const MAX_BATCH_SIZE: i32 = 2000;
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
 }
 
@@ -49,8 +48,6 @@ where
 {
   #[must_use]
   pub(crate) fn new(stealer_index: usize) -> Self {
-    T::load_capacity().fetch_add(T::MAX_BATCH_SIZE);
-
     Task(PendingAssignment {
       stealer_index,
       loader: PhantomData,
@@ -82,41 +79,18 @@ where
   // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
   pub fn get_assignment(self) -> TaskAssignment<T> {
     let stealers = T::task_stealers();
-    let mut keys: HashSet<T::Key> = HashSet::new();
     let mut requests: Vec<Request<T>> = Vec::new();
-    let mut received_count = 0;
-
-    while keys.len().ge(&(T::MAX_BATCH_SIZE as usize)) {
+    loop {
       if let Some(req) = self.get_task(&stealers) {
-        received_count += 1;
-
         if !req.tx.is_closed() {
-          keys.insert(req.key.clone());
           requests.push(req);
         }
-      } else {
-        break;
-      };
-    }
 
-    let unfulfilled_capacity = T::MAX_BATCH_SIZE - received_count;
-
-    let prior_capacity = T::load_capacity().fetch_sub(unfulfilled_capacity);
-
-    if (prior_capacity - unfulfilled_capacity).is_negative() {
-      loop {
-        if let Some(req) = self.get_task(&stealers) {
-          if !req.tx.is_closed() {
-            keys.insert(req.key.clone());
-            requests.push(req);
-          }
-
-          if T::load_capacity().fetch_add(1).eq(&-1) {
-            break;
-          }
-        } else {
+        if T::queue_size().fetch_sub(1).eq(&1) {
           break;
         }
+      } else if T::queue_size().load().eq(&0) {
+        break;
       }
     }
 
@@ -124,10 +98,9 @@ where
       requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
 
       trace!(
-        "{:?} assigned {} requests across {} keys",
+        "{:?} assigned {} requests",
         core::any::type_name::<T>(),
-        requests.len(),
-        keys.len()
+        requests.len()
       );
 
       TaskAssignment::LoadBatch(Task::from_requests(requests))
