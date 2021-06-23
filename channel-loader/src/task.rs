@@ -1,13 +1,9 @@
 use crate::{key::Key, loader::StaticLoaderExt, request::Request};
-use crossbeam::deque::{Steal, Stealer};
+use crossbeam::deque::Steal;
 use itertools::Itertools;
 use log::trace;
 use rayon::prelude::*;
-use std::{
-  collections::HashMap,
-  marker::PhantomData,
-  sync::{Arc, RwLockReadGuard},
-};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work consolidation
 #[async_trait::async_trait]
@@ -21,7 +17,6 @@ pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
 pub struct Task<T>(T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
-  stealer_index: usize,
   loader: PhantomData<fn() -> T>,
 }
 
@@ -48,51 +43,39 @@ where
   T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn new(stealer_index: usize) -> Self {
+  pub(crate) fn new() -> Self {
     Task(PendingAssignment {
-      stealer_index,
       loader: PhantomData,
     })
   }
 
-  /// Steal a task by cycling through queues, starting at the index associated with the queue's task spawner. This maximizes colocality of loads enqueued together
-  pub fn get_task<'a>(
-    &self,
-    stealers: &'a RwLockReadGuard<Vec<Stealer<Request<T>>>>,
-  ) -> Option<Request<T>> {
-    // We intentionally take all requests from a given stealer before taking any from the next
-    for stealer in stealers
-      .iter()
-      .skip(self.0.stealer_index)
-      .chain(stealers.iter().take(self.0.stealer_index))
-    {
-      loop {
-        match stealer.steal() {
-          Steal::Success(req) => return Some(req),
-          Steal::Retry => continue,
-          Steal::Empty => break,
-        }
-      }
-    }
-    None
+  pub fn collect_tasks() -> Vec<Request<T>> {
+    T::task_stealers()
+      .clone()
+      .into_par_iter()
+      .flat_map_iter(|stealer| {
+        std::iter::from_fn(move || loop {
+          match stealer.steal() {
+            Steal::Success(req) => break Some(req),
+            Steal::Retry => continue,
+            Steal::Empty => break None,
+          }
+        })
+      })
+      .collect()
   }
 
   // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
   pub fn get_assignment(self) -> TaskAssignment<T> {
-    let stealers = T::task_stealers();
-    let mut requests: Vec<Request<T>> = Vec::new();
-    loop {
-      if let Some(req) = self.get_task(&stealers) {
-        if !req.tx.is_closed() {
-          requests.push(req);
-        }
+    let mut requests: Vec<Request<T>> = Task::<PendingAssignment<T>>::collect_tasks();
+    let requests_len = requests.len();
+    let mut queue_size = T::queue_size().fetch_sub(requests_len) - requests_len;
 
-        if T::queue_size().fetch_sub(1).eq(&1) {
-          break;
-        }
-      } else if T::queue_size().load().eq(&0) {
-        break;
-      }
+    while queue_size.gt(&0) {
+      let batch = Task::<PendingAssignment<T>>::collect_tasks();
+      let batch_len = batch.len();
+      queue_size = T::queue_size().fetch_sub(batch_len) - batch_len;
+      requests.extend(batch.into_iter());
     }
 
     if requests.len().gt(&0) {

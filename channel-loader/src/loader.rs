@@ -16,8 +16,7 @@ struct Stealers {}
 
 /// Core load channel responsible for receiving incoming load_by requests to be enqueued via thread local [`crossbeam::deque::Worker`] queues
 pub struct DataLoader<T: TaskHandler + 'static> {
-  pub(crate) stealer_index: usize,
-  pub(crate) queue_size: &'static AtomicCell<i32>,
+  pub(crate) queue_size: &'static AtomicCell<usize>,
   pub(crate) queue: Worker<Request<T>>,
 }
 
@@ -26,19 +25,14 @@ where
   T: TaskHandler,
 {
   pub fn new(
-    queue_size: &'static AtomicCell<i32>,
+    queue_size: &'static AtomicCell<usize>,
     task_stealers: &'static RwLock<Vec<Stealer<Request<T>>>>,
   ) -> Self {
     let queue = Worker::new_fifo();
     let mut task_stealers = task_stealers.write().unwrap();
-    let stealer_index = task_stealers.len();
     task_stealers.push(queue.stealer());
 
-    Self {
-      stealer_index,
-      queue_size,
-      queue,
-    }
+    Self { queue_size, queue }
   }
 
   pub fn load_by(&self, key: T::Key) -> oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>
@@ -47,9 +41,8 @@ where
   {
     let (req, rx) = Request::new(key);
     if self.queue_size.fetch_add(1).eq(&0) {
-      let task = Task::new(self.stealer_index);
-      tokio::task::spawn(async move {
-        T::handle_task(task).await;
+      tokio::task::spawn(async {
+        T::handle_task(Task::new()).await;
       });
     }
 
@@ -63,7 +56,7 @@ pub trait StaticLoaderExt {
   fn loader() -> &'static LocalKey<DataLoader<Self>>
   where
     Self: TaskHandler;
-  fn queue_size() -> &'static AtomicCell<i32>;
+  fn queue_size() -> &'static AtomicCell<usize>;
   fn task_stealers<'a>() -> RwLockReadGuard<'a, Vec<Stealer<Request<Self>>>>
   where
     Self: TaskHandler;

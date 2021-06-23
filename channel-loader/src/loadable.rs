@@ -14,7 +14,7 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    static QUEUE_SIZE: $crate::crossbeam::atomic::AtomicCell<i32> = $crate::crossbeam::atomic::AtomicCell::new(0);
+    static QUEUE_SIZE: $crate::crossbeam::atomic::AtomicCell<usize> = $crate::crossbeam::atomic::AtomicCell::new(0);
 
     #[static_init::dynamic(0)]
     static TASK_STEALERS: std::sync::RwLock<Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> = std::sync::RwLock::new(Vec::new());
@@ -27,7 +27,7 @@ macro_rules! define_static_loader {
       fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
         &LOADER
       }
-      fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<i32> {
+      fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<usize> {
         &QUEUE_SIZE
       }
       fn task_stealers<'a>() -> std::sync::RwLockReadGuard<'a, Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> {
@@ -41,7 +41,7 @@ macro_rules! define_static_loader {
 
   ($name_prefix:ident, $loader:ty) => {
     $crate::paste::paste! {
-      static [<$name_prefix _QUEUE_SIZE>]: $crate::crossbeam::atomic::AtomicCell<i32> = $crate::crossbeam::atomic::AtomicCell::new(0);
+      static [<$name_prefix _QUEUE_SIZE>]: $crate::crossbeam::atomic::AtomicCell<usize> = $crate::crossbeam::atomic::AtomicCell::new(0);
 
       #[static_init::dynamic(0)]
       static [<$name_prefix _TASK_STEALERS>]: std::sync::RwLock<Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> = std::sync::RwLock::new(Vec::new());
@@ -55,7 +55,7 @@ macro_rules! define_static_loader {
         fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
           &[<$name_prefix _LOADER>]
         }
-        fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<i32> {
+        fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<usize> {
           &[<$name_prefix _QUEUE_SIZE>]
         }
         fn task_stealers<'a>() -> std::sync::RwLockReadGuard<'a, Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> {
