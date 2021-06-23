@@ -65,11 +65,10 @@ where
       .collect()
   }
 
-  // work-steal the largest possible task assignment from the corresponding [`crossbeam::deque::Worker`] of the associated [`DataLoader`]
+  // Work-steal all pending load tasks
   pub fn get_assignment(self) -> TaskAssignment<T> {
-    let mut requests: Vec<Request<T>> = Task::<PendingAssignment<T>>::collect_tasks();
-    let requests_len = requests.len();
-    let mut queue_size = T::queue_size().fetch_sub(requests_len) - requests_len;
+    let mut requests = Vec::new();
+    let mut queue_size = usize::MAX;
 
     while queue_size.gt(&0) {
       let batch = Task::<PendingAssignment<T>>::collect_tasks();
