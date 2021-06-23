@@ -2,7 +2,7 @@
 authors = [ "Thomas Sieverding <Thomas@bajix.com>" ]
 edition = "2018"
 name = "channel-loader"
-version = "0.1.0-beta.11"
+version = "0.1.0-beta.12"
 description = "A channel based solution designed for efficient data loading"
 readme = "../README.md"
 license = "MIT"
