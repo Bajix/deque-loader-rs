@@ -17,6 +17,7 @@ diesel-connection = { version = "1.0.5", optional = true }
 itertools = "0.10.1"
 log = "0.4.14"
 paste = "1.0.5"
+rayon = "1.5.1"
 static_init = "1.0.1"
 thiserror = "1.0.25"
 tokio = { version = "1.7.1", features = [ "rt", "sync", "time", "macros" ] }

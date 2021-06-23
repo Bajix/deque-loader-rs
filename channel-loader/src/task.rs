@@ -2,6 +2,7 @@ use crate::{key::Key, loader::StaticLoaderExt, request::Request};
 use crossbeam::deque::{Steal, Stealer};
 use itertools::Itertools;
 use log::trace;
+use rayon::prelude::*;
 use std::{
   collections::HashMap,
   marker::PhantomData,
@@ -95,7 +96,7 @@ where
     }
 
     if requests.len().gt(&0) {
-      requests.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+      requests.par_sort_unstable_by(|a, b| a.key.cmp(&b.key));
 
       trace!(
         "{:?} assigned {} requests",
@@ -139,33 +140,20 @@ where
     let Task(LoadBatch { requests }) = self;
 
     match results {
-      Ok(mut values) => {
-        let mut iter = requests
-          .into_iter()
+      Ok(values) => {
+        requests
+          .into_par_iter()
           .filter(|req| !req.tx.is_closed())
-          .peekable();
-
-        while let Some(req) = iter.next() {
-          let can_take_value = {
-            if let Some(next_req) = iter.peek() {
-              !next_req.key.eq(&req.key)
-            } else {
-              true
-            }
-          };
-
-          let value = match can_take_value {
-            true => values.remove(&req.key),
-            false => values.get(&req.key).cloned(),
-          };
-
-          req.resolve(Ok(value));
-        }
+          .for_each(|req| {
+            let value = values.get(&req.key).cloned();
+            req.resolve(Ok(value));
+          });
       }
+
       Err(e) => {
-        for req in requests {
-          req.resolve(Err(e.clone()));
-        }
+        requests
+          .into_par_iter()
+          .for_each(|req| req.resolve(Err(e.clone())));
       }
     };
 
