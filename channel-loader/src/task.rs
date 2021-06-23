@@ -17,7 +17,7 @@ pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
 pub struct Task<T>(T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
-  loader: PhantomData<fn() -> T>,
+  requests: Vec<Request<T>>,
 }
 
 /// A batch of load requests, unique by key, to be loaded and the result resolved
@@ -44,12 +44,17 @@ where
 {
   #[must_use]
   pub(crate) fn new() -> Self {
-    Task(PendingAssignment {
-      loader: PhantomData,
-    })
+    let requests = Vec::new();
+
+    Task(PendingAssignment { requests })
   }
 
-  pub fn collect_tasks() -> Vec<Request<T>> {
+  pub(crate) fn eagerily_steal_batch(&mut self) {
+    let batch = Task::<PendingAssignment<T>>::collect_tasks();
+    self.0.requests.extend(batch.into_iter());
+  }
+
+  fn collect_tasks() -> Vec<Request<T>> {
     T::task_stealers()
       .clone()
       .into_iter()
@@ -67,13 +72,10 @@ where
 
   // Work-steal all pending load tasks
   pub fn get_assignment(self) -> TaskAssignment<T> {
-    let mut requests = Vec::new();
-    let mut queue_size = usize::MAX;
+    let mut requests = self.0.requests;
 
-    while queue_size.gt(&0) {
+    while let Err(_) = T::queue_size().compare_exchange(requests.len(), 0) {
       let batch = Task::<PendingAssignment<T>>::collect_tasks();
-      let batch_len = batch.len();
-      queue_size = T::queue_size().fetch_sub(batch_len) - batch_len;
       requests.extend(batch.into_iter());
     }
 

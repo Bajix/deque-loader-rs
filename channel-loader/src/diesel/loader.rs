@@ -28,8 +28,10 @@ where
   type Value = T::Value;
   type Error = SimpleDieselError;
 
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
+  async fn handle_task(mut task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
     spawn_blocking(move || {
+      task.eagerily_steal_batch();
+
       let conn = get_connection();
 
       match task.get_assignment() {
