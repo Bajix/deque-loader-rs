@@ -12,8 +12,8 @@ use std::{
 #[async_trait::async_trait]
 pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
   type Key: Key;
-  type Value: Send + Clone + 'static;
-  type Error: Send + Clone + 'static;
+  type Value: Send + Sync + Clone + 'static;
+  type Error: Send + Sync + Clone + 'static;
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
 }
 

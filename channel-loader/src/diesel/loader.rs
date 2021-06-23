@@ -12,7 +12,7 @@ use super::error::{DieselError, SimpleDieselError};
 /// a [`diesel`] specific loader interface designed with that optimizes batching around connection acquisition using [`diesel_connection::get_connection`].
 pub trait DieselLoader: Send + Sync {
   type Key: Key;
-  type Value: Send + Clone + 'static;
+  type Value: Send + Sync + Clone + 'static;
   fn load(
     conn: PooledConnection,
     keys: Vec<Self::Key>,
