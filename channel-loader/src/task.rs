@@ -1,5 +1,4 @@
-use crate::{key::Key, loader::StaticLoaderExt, request::Request};
-use crossbeam::deque::Steal;
+use crate::{key::Key, request::Request, worker::QueueHandle};
 use itertools::Itertools;
 use log::trace;
 use rayon::prelude::*;
@@ -7,17 +6,18 @@ use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
 #[async_trait::async_trait]
-pub trait TaskHandler: StaticLoaderExt + Default + Send + Sync {
+pub trait TaskHandler: Default + Send + Sync {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
+  const CORES_PER_WORKER_GROUP: usize = 4;
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
 }
 
-pub struct Task<T>(T);
+pub struct Task<T>(pub(crate) T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
-pub struct PendingAssignment<T: TaskHandler> {
-  requests: Vec<Request<T>>,
+pub struct PendingAssignment<T: TaskHandler + 'static> {
+  queue_handle: Arc<QueueHandle<T>>,
 }
 
 /// A batch of load requests, unique by key, to be loaded and the result resolved
@@ -43,41 +43,13 @@ where
   T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn new() -> Self {
-    let requests = Vec::new();
-
-    Task(PendingAssignment { requests })
-  }
-
-  pub(crate) fn eagerily_steal_batch(&mut self) {
-    let batch = Task::<PendingAssignment<T>>::collect_tasks();
-    self.0.requests.extend(batch.into_iter());
-  }
-
-  fn collect_tasks() -> Vec<Request<T>> {
-    T::task_stealers()
-      .clone()
-      .into_iter()
-      .flat_map(|stealer| {
-        std::iter::from_fn(move || loop {
-          match stealer.steal() {
-            Steal::Success(req) => break Some(req),
-            Steal::Retry => continue,
-            Steal::Empty => break None,
-          }
-        })
-      })
-      .collect()
+  pub(crate) fn new(queue_handle: Arc<QueueHandle<T>>) -> Self {
+    Task(PendingAssignment { queue_handle })
   }
 
   // Work-steal all pending load tasks
   pub fn get_assignment(self) -> TaskAssignment<T> {
-    let mut requests = self.0.requests;
-
-    while let Err(_) = T::queue_size().compare_exchange(requests.len(), 0) {
-      let batch = Task::<PendingAssignment<T>>::collect_tasks();
-      requests.extend(batch.into_iter());
-    }
+    let mut requests = self.0.queue_handle.drain_queue();
 
     if requests.len().gt(&0) {
       requests.par_sort_unstable_by(|a, b| a.key.cmp(&b.key));
@@ -101,7 +73,7 @@ impl<T> Task<LoadBatch<T>>
 where
   T: TaskHandler,
 {
-  fn from_requests(requests: Vec<Request<T>>) -> Self {
+  pub(crate) fn from_requests(requests: Vec<Request<T>>) -> Self {
     Task(LoadBatch { requests })
   }
 
@@ -149,7 +121,7 @@ impl<T> Task<CompletionReceipt<T>>
 where
   T: TaskHandler,
 {
-  fn resolve_receipt() -> Self {
+  pub(crate) fn resolve_receipt() -> Self {
     Task(CompletionReceipt {
       loader: PhantomData,
     })

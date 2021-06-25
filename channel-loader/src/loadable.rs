@@ -14,55 +14,32 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    static QUEUE_SIZE: $crate::crossbeam::atomic::AtomicCell<usize> = $crate::crossbeam::atomic::AtomicCell::new(0);
-
     #[static_init::dynamic(0)]
-    static TASK_STEALERS: std::sync::RwLock<Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> = std::sync::RwLock::new(Vec::new());
+    static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
 
     thread_local! {
-      static LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::new(&QUEUE_SIZE, unsafe { &TASK_STEALERS });
+      static LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
     }
 
-    impl $crate::loader::StaticLoaderExt for $loader {
+    impl $crate::loader::LocalLoader for $loader {
       fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
         &LOADER
-      }
-      fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<usize> {
-        &QUEUE_SIZE
-      }
-      fn task_stealers<'a>() -> std::sync::RwLockReadGuard<'a, Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> {
-        let stealers = unsafe {
-          &TASK_STEALERS
-        };
-        stealers.read().unwrap()
       }
     }
   };
 
   ($name_prefix:ident, $loader:ty) => {
     $crate::paste::paste! {
-      static [<$name_prefix _QUEUE_SIZE>]: $crate::crossbeam::atomic::AtomicCell<usize> = $crate::crossbeam::atomic::AtomicCell::new(0);
-
       #[static_init::dynamic(0)]
-      static [<$name_prefix _TASK_STEALERS>]: std::sync::RwLock<Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> = std::sync::RwLock::new(Vec::new());
+      static [<$name_prefix _WORKER_REGISTRY>]: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
 
       thread_local! {
-        static [<$name_prefix _LOADER>]: $crate::loader::DataLoader<$loader> =
-        $crate::loader::DataLoader::new(&[<$name_prefix _QUEUE_SIZE>], unsafe {&[<$name_prefix _TASK_STEALERS>]});
+        static [<$name_prefix _LOADER>]: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &[<$name_prefix _WORKER_REGISTRY>] });
       }
 
-      impl $crate::loader::StaticLoaderExt for $loader {
+      impl $crate::loader::LocalLoader for $loader {
         fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
           &[<$name_prefix _LOADER>]
-        }
-        fn queue_size() -> &'static $crate::crossbeam::atomic::AtomicCell<usize> {
-          &[<$name_prefix _QUEUE_SIZE>]
-        }
-        fn task_stealers<'a>() -> std::sync::RwLockReadGuard<'a, Vec<$crate::crossbeam::deque::Stealer<$crate::request::Request<$loader>>>> {
-          let stealers = unsafe {
-            &[<$name_prefix _TASK_STEALERS>]
-          };
-          stealers.read().unwrap()
         }
       }
     }
@@ -82,9 +59,9 @@ macro_rules! attach_loader {
           <$loader as $crate::task::TaskHandler>::Error,
         >,
       > {
-        use $crate::loader::StaticLoaderExt;
+        use $crate::loader::LocalLoader;
 
-        <$loader as StaticLoaderExt>::loader().with(|loader| loader.load_by(key))
+        <$loader as LocalLoader>::loader().with(|loader| loader.load_by(key))
       }
     }
   };

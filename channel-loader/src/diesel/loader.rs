@@ -1,13 +1,11 @@
+use super::error::{DieselError, SimpleDieselError};
 use crate::{
   key::Key,
-  loader::StaticLoaderExt,
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use diesel_connection::{get_connection, PooledConnection};
 use std::{collections::HashMap, sync::Arc};
 use tokio::task::spawn_blocking;
-
-use super::error::{DieselError, SimpleDieselError};
 
 /// a [`diesel`] specific loader interface using [`diesel_connection::get_connection`] for connection acquisition
 pub trait DieselLoader: Send + Sync {
@@ -22,16 +20,14 @@ pub trait DieselLoader: Send + Sync {
 #[async_trait::async_trait]
 impl<T> TaskHandler for T
 where
-  T: StaticLoaderExt + Default + DieselLoader + 'static,
+  T: Default + DieselLoader + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;
   type Error = SimpleDieselError;
 
-  async fn handle_task(mut task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
     spawn_blocking(move || {
-      task.eagerily_steal_batch();
-
       let conn = get_connection();
 
       match task.get_assignment() {

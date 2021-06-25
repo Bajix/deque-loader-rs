@@ -1,48 +1,48 @@
 use crate::{
   request::Request,
   task::{Task, TaskHandler},
+  worker::{QueueHandle, WorkerRegistry},
 };
-use crossbeam::{
-  atomic::AtomicCell,
-  deque::{Stealer, Worker},
-};
-use std::{
-  sync::{Arc, RwLock, RwLockReadGuard},
-  thread::LocalKey,
-};
+use crossbeam::deque::Worker;
+use std::{sync::Arc, thread::LocalKey};
 use tokio::sync::oneshot;
-
-struct Stealers {}
 
 /// Core load channel responsible for receiving incoming load_by requests to be enqueued via thread local [`crossbeam::deque::Worker`] queues
 pub struct DataLoader<T: TaskHandler + 'static> {
-  pub(crate) queue_size: &'static AtomicCell<usize>,
   pub(crate) queue: Worker<Request<T>>,
+  pub(crate) queue_handle: Arc<QueueHandle<T>>,
 }
 
 impl<T> DataLoader<T>
 where
   T: TaskHandler,
 {
-  pub fn new(
-    queue_size: &'static AtomicCell<usize>,
-    task_stealers: &'static RwLock<Vec<Stealer<Request<T>>>>,
-  ) -> Self {
+  pub fn new() -> Self {
     let queue = Worker::new_fifo();
-    let mut task_stealers = task_stealers.write().unwrap();
-    task_stealers.push(queue.stealer());
+    let queue_handle = Arc::new(QueueHandle::new(vec![queue.stealer()]));
 
-    Self { queue_size, queue }
+    Self {
+      queue_handle,
+      queue,
+    }
+  }
+
+  pub fn from_registry(registry: &'static WorkerRegistry<T>) -> Self {
+    registry
+      .create_local_loader()
+      .expect("There can only be at most one thread local DataLoader per CPU core")
   }
 
   pub fn load_by(&self, key: T::Key) -> oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>
   where
     T: TaskHandler,
   {
-    let (req, rx) = Request::new(key);
-    if self.queue_size.fetch_add(1).eq(&0) {
-      tokio::task::spawn(async {
-        T::handle_task(Task::new()).await;
+    let (req, rx) = Request::<T>::new(key);
+
+    if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
+      let task = Task::new(self.queue_handle.clone());
+      tokio::task::spawn(async move {
+        T::handle_task(task).await;
       });
     }
 
@@ -52,12 +52,8 @@ where
   }
 }
 
-pub trait StaticLoaderExt {
+pub trait LocalLoader {
   fn loader() -> &'static LocalKey<DataLoader<Self>>
-  where
-    Self: TaskHandler;
-  fn queue_size() -> &'static AtomicCell<usize>;
-  fn task_stealers<'a>() -> RwLockReadGuard<'a, Vec<Stealer<Request<Self>>>>
   where
     Self: TaskHandler;
 }

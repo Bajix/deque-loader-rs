@@ -50,8 +50,6 @@
 //! ```
 
 #![allow(dead_code)]
-#[doc(hidden)]
-pub extern crate crossbeam;
 #[allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
 pub extern crate paste;
@@ -67,6 +65,8 @@ pub mod loader;
 #[doc(hidden)]
 pub mod request;
 pub mod task;
+#[doc(hidden)]
+pub mod worker;
 
 pub use key::Key;
 pub use loadable::Loadable;
