@@ -16,7 +16,6 @@ impl QueryRoot {
   async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Arc<Vec<User>>> {
     let users = <User as Loadable<UsersLoader>>::load_by(())
       .await
-      .unwrap()
       .map_err(|err: SimpleDieselError| err.extend())?
       .unwrap_or_else(|| Arc::new(vec![]));
 
@@ -30,7 +29,6 @@ impl QueryRoot {
   ) -> FieldResult<Arc<Vec<Bookmark>>> {
     let bookmarks = Bookmark::load_by(user_id)
       .await
-      .unwrap()
       .map_err(|err| err.extend())?
       .unwrap_or_else(|| Arc::new(vec![]));
 

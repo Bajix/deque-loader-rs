@@ -1,14 +1,13 @@
 use crate::{
-  request::Request,
+  request::{LoadState, Request},
   task::{Task, TaskHandler},
   worker::{QueueHandle, WorkerRegistry},
 };
 use crossbeam::deque::Worker;
 use std::{sync::Arc, thread::LocalKey};
-use tokio::sync::oneshot;
-
+use tokio::sync::{oneshot, watch};
 /// Core load channel responsible for receiving incoming load_by requests to be enqueued via thread local [`crossbeam::deque::Worker`] queues
-pub struct DataLoader<T: TaskHandler + 'static> {
+pub struct DataLoader<T: TaskHandler> {
   pub(crate) queue: Worker<Request<T>>,
   pub(crate) queue_handle: Arc<QueueHandle<T>>,
 }
@@ -37,7 +36,7 @@ where
   where
     T: TaskHandler,
   {
-    let (req, rx) = Request::<T>::new(key);
+    let (req, rx) = Request::<T>::new_oneshot(key);
 
     if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
       let task = Task::new(self.queue_handle.clone());

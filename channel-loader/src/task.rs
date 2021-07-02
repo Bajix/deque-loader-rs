@@ -6,7 +6,7 @@ use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
 #[async_trait::async_trait]
-pub trait TaskHandler: Default + Send + Sync {
+pub trait TaskHandler: Default + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
@@ -16,7 +16,7 @@ pub trait TaskHandler: Default + Send + Sync {
 
 pub struct Task<T>(pub(crate) T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
-pub struct PendingAssignment<T: TaskHandler + 'static> {
+pub struct PendingAssignment<T: TaskHandler> {
   queue_handle: Arc<QueueHandle<T>>,
 }
 
@@ -52,7 +52,7 @@ where
     let mut requests = self.0.queue_handle.drain_queue();
 
     if requests.len().gt(&0) {
-      requests.par_sort_unstable_by(|a, b| a.key.cmp(&b.key));
+      requests.par_sort_unstable_by(|a, b| a.key().cmp(b.key()));
 
       trace!(
         "{:?} assigned {} requests",
@@ -82,7 +82,7 @@ where
       .0
       .requests
       .iter()
-      .map(|req| &req.key)
+      .map(|req| req.key())
       .dedup()
       .map(|k| k.to_owned())
       .collect_vec()
@@ -97,13 +97,10 @@ where
 
     match results {
       Ok(values) => {
-        requests
-          .into_par_iter()
-          .filter(|req| !req.tx.is_closed())
-          .for_each(|req| {
-            let value = values.get(&req.key).cloned();
-            req.resolve(Ok(value));
-          });
+        requests.into_par_iter().for_each(|req| {
+          let value = values.get(req.key()).cloned();
+          req.resolve(Ok(value));
+        });
       }
 
       Err(e) => {

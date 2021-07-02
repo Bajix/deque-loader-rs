@@ -50,6 +50,8 @@
 //! ```
 
 #![allow(dead_code)]
+#[doc(hidden)]
+pub extern crate async_trait;
 #[allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
 pub extern crate paste;

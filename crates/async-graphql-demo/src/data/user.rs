@@ -39,7 +39,6 @@ impl User {
   async fn bookmarks(&self, _ctx: &Context<'_>) -> FieldResult<Arc<Vec<Bookmark>>> {
     let bookmarks = Bookmark::load_by(UserId::from(self.id))
       .await
-      .unwrap()
       .map_err(|err| err.extend())?
       .unwrap_or_else(|| Arc::new(vec![]));
 
