@@ -14,6 +14,8 @@ pub enum DieselError {
   Unauthorized,
   #[error("Entity Not Found")]
   NotFound,
+  #[error("Internal Server Error")]
+  InternalServerError,
   #[error(transparent)]
   PoolError(#[from] PoolError),
   #[error(transparent)]
@@ -31,6 +33,8 @@ pub enum SimpleDieselError {
   Unauthorized,
   #[error("Entity Not Found")]
   NotFound,
+  #[error("Internal Server Error")]
+  InternalServerError,
   #[error("Bad connection")]
   BadConnection,
   #[error("Invalid connection")]
@@ -43,7 +47,7 @@ pub enum SimpleDieselError {
   ForeignKeyViolation,
   #[error("Connection timed out")]
   ConnectionTimeout,
-  #[error("Internal database error")]
+  #[error("Database error")]
   DatabaseError,
 }
 
@@ -53,6 +57,7 @@ impl From<DieselError> for SimpleDieselError {
       DieselError::Forbidden => SimpleDieselError::Forbidden,
       DieselError::Unauthorized => SimpleDieselError::Unauthorized,
       DieselError::NotFound => SimpleDieselError::NotFound,
+      DieselError::InternalServerError => SimpleDieselError::InternalServerError,
       DieselError::PoolError(err) => err.into(),
       DieselError::ConnectionError(err) => err.into(),
       DieselError::QueryError(err) => err.into(),
@@ -87,13 +92,13 @@ impl From<ConnectionError> for SimpleDieselError {
 impl From<diesel::result::Error> for SimpleDieselError {
   fn from(err: diesel::result::Error) -> Self {
     match err {
-      diesel::result::Error::AlreadyInTransaction => SimpleDieselError::DatabaseError,
+      diesel::result::Error::AlreadyInTransaction => SimpleDieselError::InternalServerError,
       diesel::result::Error::DatabaseError(err, _info) => err.into(),
-      diesel::result::Error::DeserializationError(_) => SimpleDieselError::DatabaseError,
-      diesel::result::Error::InvalidCString(_) => SimpleDieselError::DatabaseError,
+      diesel::result::Error::DeserializationError(_) => SimpleDieselError::InternalServerError,
+      diesel::result::Error::InvalidCString(_) => SimpleDieselError::InternalServerError,
       diesel::result::Error::NotFound => SimpleDieselError::NotFound,
-      diesel::result::Error::QueryBuilderError(_) => SimpleDieselError::DatabaseError,
-      diesel::result::Error::SerializationError(_) => SimpleDieselError::DatabaseError,
+      diesel::result::Error::QueryBuilderError(_) => SimpleDieselError::InternalServerError,
+      diesel::result::Error::SerializationError(_) => SimpleDieselError::InternalServerError,
       _ => SimpleDieselError::DatabaseError,
     }
   }
@@ -118,6 +123,7 @@ impl async_graphql::ErrorExtensions for SimpleDieselError {
       SimpleDieselError::Forbidden => e.set("code", "FORBIDDEN"),
       SimpleDieselError::Unauthorized => e.set("code", "UNAUTHORIZED"),
       SimpleDieselError::NotFound => e.set("code", "NOT_FOUND"),
+      SimpleDieselError::InternalServerError => e.set("code", "INTERNAL_SERVER_ERROR"),
       SimpleDieselError::BadConnection => e.set("code", "BAD_CONNECTION"),
       SimpleDieselError::InvalidConnection => e.set("code", "INVALID_CONNECTION"),
       SimpleDieselError::RollbackTransaction => e.set("code", "ROLLBACK_TRANSACTION"),
