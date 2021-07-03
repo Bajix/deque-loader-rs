@@ -1,14 +1,15 @@
-use crate::task::TaskHandler;
+use crate::{request::LoadCache, task::TaskHandler};
 use std::sync::Arc;
-use tokio::sync::oneshot;
 
 /// Loadable types load using the corresponding static loader associated by type via [`define_static_loader`]
 #[async_trait::async_trait]
 pub trait Loadable<T: TaskHandler> {
   /// Load a value by it's key in a batched load. If no [`TaskHandler`] is pending assignment, one will be scheduled. Even though this is scheduled up front, task assignment is deferred and will capture all loads that come thereafter; for a given request, it is guaranteed all loads will be enqueued before task assigment and batched optimally.
-  async fn load_by(key: T::Key) -> Result<Option<Arc<T::Value>>, T::Error>
-  where
-    T: TaskHandler;
+  async fn load_by(key: T::Key) -> Result<Option<Arc<T::Value>>, T::Error>;
+  async fn cached_load_by(
+    key: T::Key,
+    cache: &LoadCache<T>,
+  ) -> Result<Option<Arc<T::Value>>, T::Error>;
 }
 
 /// Defines a static `DataLoader` instance from a type that implements [`TaskHandler`]
@@ -64,6 +65,27 @@ macro_rules! attach_loader {
         let rx = <$loader as LocalLoader>::loader().with(|loader| loader.load_by(key));
 
         rx.await.unwrap()
+      }
+
+      async fn cached_load_by(
+        key: <$loader as $crate::task::TaskHandler>::Key,
+        cache: &$crate::request::LoadCache<$loader>,
+      ) -> Result<
+        Option<std::sync::Arc<<$loader as $crate::task::TaskHandler>::Value>>,
+        <$loader as $crate::task::TaskHandler>::Error,
+      > {
+        use $crate::loader::LocalLoader;
+
+        let mut rx =
+          <$loader as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, &cache));
+
+        loop {
+          if let $crate::request::LoadState::Ready(ref result) = *rx.borrow() {
+            break result.to_owned();
+          }
+
+          rx.changed().await.unwrap();
+        }
       }
     }
   };

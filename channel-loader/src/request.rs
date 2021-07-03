@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::task::TaskHandler;
+use flurry::HashMap;
 use tokio::sync::{oneshot, watch};
 
 pub enum LoadState<T: TaskHandler> {
@@ -16,6 +17,10 @@ pub enum Request<T: TaskHandler> {
     key: T::Key,
     tx: oneshot::Sender<Result<Option<Arc<T::Value>>, T::Error>>,
   },
+}
+pub enum LoadReceiver<T: TaskHandler> {
+  Watch(watch::Receiver<LoadState<T>>),
+  Oneshot(oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>),
 }
 
 impl<T: TaskHandler> Request<T> {
@@ -60,5 +65,40 @@ impl<T: TaskHandler> Request<T> {
         }
       }
     };
+  }
+}
+
+pub struct LoadCache<T: TaskHandler> {
+  data: HashMap<T::Key, watch::Receiver<LoadState<T>>>,
+}
+
+impl<T> LoadCache<T>
+where
+  T: TaskHandler,
+{
+  pub fn new() -> Self {
+    LoadCache {
+      data: HashMap::new(),
+    }
+  }
+
+  pub(crate) fn get_or_create(
+    &self,
+    key: &T::Key,
+  ) -> (watch::Receiver<LoadState<T>>, Option<Request<T>>) {
+    let guard = self.data.guard();
+
+    loop {
+      if let Some(rx) = self.data.get(key, &guard) {
+        break (rx.clone(), None);
+      }
+
+      let (req, rx) = Request::<T>::new_watch(key.to_owned());
+
+      match self.data.try_insert(key.clone(), rx, &guard) {
+        Ok(rx) => break (rx.to_owned(), Some(req)),
+        Err(_) => continue,
+      }
+    }
   }
 }
