@@ -70,7 +70,7 @@ impl DieselLoader for UserLoader {
   }
 }
 
-define_static_loader!(USER, UserLoader);
+define_static_loader!(UserLoader);
 attach_loader!(User, UserLoader);
 
 #[derive(Default)]
@@ -96,5 +96,5 @@ impl DieselLoader for UsersLoader {
   }
 }
 
-define_static_loader!(USERS, UsersLoader);
+define_static_loader!(UsersLoader);
 attach_loader!(User, UsersLoader);

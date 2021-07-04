@@ -45,7 +45,7 @@
 //!   }
 //! }
 //!
-//! define_static_loader!(USER, UserLoader);
+//! define_static_loader!(UserLoader);
 //! attach_loader!(User, UserLoader);
 //! ```
 

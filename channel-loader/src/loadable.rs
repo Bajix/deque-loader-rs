@@ -12,43 +12,28 @@ pub trait Loadable<T: TaskHandler> {
   ) -> Result<Option<Arc<T::Value>>, T::Error>;
 }
 
-/// Defines a static `DataLoader` instance from a type that implements [`TaskHandler`]
+/// Thread local [`DataLoader`] instances grouped into worker groups and statically pre-allocated per core as to be lock free
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    #[static_init::dynamic(0)]
-    static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
-
-    thread_local! {
-      static LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
-    }
-
-    impl $crate::loader::LocalLoader for $loader {
-      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
-        &LOADER
-      }
-    }
-  };
-
-  ($name_prefix:ident, $loader:ty) => {
     $crate::paste::paste! {
       #[static_init::dynamic(0)]
-      static [<$name_prefix _WORKER_REGISTRY>]: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
+      static [<$loader:snake:upper _REGISTRY>]: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
 
       thread_local! {
-        static [<$name_prefix _LOADER>]: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &[<$name_prefix _WORKER_REGISTRY>] });
+        static [<$loader:snake:upper>]: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &[<$loader:snake:upper _REGISTRY>] });
       }
 
       impl $crate::loader::LocalLoader for $loader {
         fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
-          &[<$name_prefix _LOADER>]
+          &[<$loader:snake:upper>]
         }
       }
     }
   };
 }
 
-/// Implements [`Loadable`] using the corresponding static instance as defined by [`define_static_loader`]
+/// Implements [`Loadable`] using the current thread local [`DataLoader`] as defined by [`define_static_loader`]
 #[macro_export]
 macro_rules! attach_loader {
   ($loadable:ty, $loader:ty) => {
@@ -132,7 +117,7 @@ mod tests {
     }
   }
 
-  define_static_loader!(BATCH, BatchLoader);
+  define_static_loader!(BatchLoader);
   attach_loader!(BatchSize, BatchLoader);
 
   #[tokio::test]
