@@ -43,7 +43,7 @@ where
   pub(crate) fn drain_queue(&self) -> Vec<Request<T>> {
     let mut requests = vec![];
 
-    while let Err(_) = self.queue_size.compare_exchange(requests.len(), 0) {
+    while self.queue_size.compare_exchange(requests.len(), 0).is_err() {
       let batch = self.collect_tasks();
       requests.extend(batch.into_iter());
     }
@@ -62,7 +62,7 @@ where
   T: TaskHandler,
 {
   fn new(set_size: usize) -> Self {
-    let workers = iter::repeat_with(|| Worker::new_fifo())
+    let workers = iter::repeat_with(Worker::new_fifo)
       .take(set_size)
       .collect_vec();
 

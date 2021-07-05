@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
 use crate::task::TaskHandler;
 use flurry::HashMap;
+use std::sync::Arc;
 use tokio::sync::{oneshot, watch};
 
 pub enum LoadState<T: TaskHandler> {
@@ -17,10 +16,6 @@ pub enum Request<T: TaskHandler> {
     key: T::Key,
     tx: oneshot::Sender<Result<Option<Arc<T::Value>>, T::Error>>,
   },
-}
-pub enum LoadReceiver<T: TaskHandler> {
-  Watch(watch::Receiver<LoadState<T>>),
-  Oneshot(oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>),
 }
 
 impl<T: TaskHandler> Request<T> {
@@ -67,7 +62,6 @@ impl<T: TaskHandler> Request<T> {
     };
   }
 }
-
 pub struct LoadCache<T: TaskHandler> {
   data: HashMap<T::Key, watch::Receiver<LoadState<T>>>,
 }
