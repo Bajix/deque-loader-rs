@@ -52,13 +52,15 @@
 #![allow(dead_code)]
 #[doc(hidden)]
 pub extern crate async_trait;
+#[cfg(feature = "diesel-loader")]
 #[allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
 pub extern crate paste;
 #[doc(hidden)]
 pub extern crate static_init;
-#[cfg(feature = "diesel-loader")]
 pub mod diesel;
+#[cfg(feature = "graphql")]
+pub mod graphql;
 mod key;
 #[doc(hidden)]
 pub mod loadable;

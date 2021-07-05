@@ -3,6 +3,7 @@ use async_graphql::{
   http::{playground_source, GraphQLPlaygroundConfig},
 };
 use async_graphql_warp::{BadRequest, Response};
+use channel_loader::graphql::insert_loader_caches;
 use http::StatusCode;
 use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
 use std::convert::Infallible;
@@ -33,10 +34,14 @@ async fn main() {
       .finish();
 
   let graphql_post = async_graphql_warp::graphql(schema).and_then(
-    |(schema, request): (
+    |(schema, mut request): (
       Schema<QueryRoot, MutationRoot, EmptySubscription>,
       async_graphql::Request,
-    )| async move { Ok::<_, Infallible>(Response::from(schema.execute(request).await)) },
+    )| async move {
+      request = insert_loader_caches(request);
+
+      Ok::<_, Infallible>(Response::from(schema.execute(request).await))
+    },
   );
 
   let graphql_playground = warp::path::end().and(warp::get()).map(|| {
