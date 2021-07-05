@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::task::spawn_blocking;
 
 /// a [`diesel`] specific loader interface using [`diesel_connection::get_connection`] for connection acquisition
-pub trait DieselLoader: Send + Sync {
+pub trait DieselLoader: Sized + Send + Sync {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   const CORES_PER_WORKER_GROUP: usize = 4;
@@ -21,7 +21,7 @@ pub trait DieselLoader: Send + Sync {
 #[async_trait::async_trait]
 impl<T> TaskHandler for T
 where
-  T: Default + DieselLoader + 'static,
+  T: DieselLoader + 'static,
 {
   type Key = T::Key;
   type Value = T::Value;

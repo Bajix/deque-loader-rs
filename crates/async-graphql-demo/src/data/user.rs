@@ -45,8 +45,6 @@ impl User {
     Ok(bookmarks)
   }
 }
-
-#[derive(Default)]
 pub struct UserLoader;
 
 impl DieselLoader for UserLoader {
@@ -72,8 +70,6 @@ impl DieselLoader for UserLoader {
 
 define_static_loader!(UserLoader);
 attach_loader!(User, UserLoader);
-
-#[derive(Default)]
 pub struct UsersLoader;
 
 impl DieselLoader for UsersLoader {

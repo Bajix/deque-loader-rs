@@ -16,8 +16,6 @@ pub struct Bookmark {
   #[diesel(embed)]
   pub content: Content,
 }
-
-#[derive(Default)]
 pub struct BookmarkLoader;
 
 impl DieselLoader for BookmarkLoader {

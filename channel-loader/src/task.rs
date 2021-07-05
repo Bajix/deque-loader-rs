@@ -6,7 +6,7 @@ use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
 #[async_trait::async_trait]
-pub trait TaskHandler: Default + Send + Sync + 'static {
+pub trait TaskHandler: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;

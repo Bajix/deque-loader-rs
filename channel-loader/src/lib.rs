@@ -21,7 +21,6 @@
 //!   pub name: String,
 //! }
 //!
-//! #[derive(Default)]
 //! pub struct UserLoader;
 //!
 //! impl DieselLoader for UserLoader {

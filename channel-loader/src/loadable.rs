@@ -82,8 +82,6 @@ mod tests {
   use crate::task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment};
   use std::{collections::HashMap, iter};
   use tokio::try_join;
-
-  #[derive(Default)]
   pub struct BatchLoader {}
 
   #[derive(Clone, Debug, PartialEq, Eq)]
