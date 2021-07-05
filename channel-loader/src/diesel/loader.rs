@@ -11,6 +11,7 @@ use tokio::task::spawn_blocking;
 pub trait DieselLoader: Send + Sync {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
+  const CORES_PER_WORKER_GROUP: usize = 4;
   fn load(
     conn: PooledConnection,
     keys: Vec<Self::Key>,
@@ -25,6 +26,7 @@ where
   type Key = T::Key;
   type Value = T::Value;
   type Error = SimpleDieselError;
+  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
   async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
     spawn_blocking(move || {
