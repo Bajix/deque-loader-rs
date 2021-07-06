@@ -1,7 +1,7 @@
 use super::{Content, User, UserId};
 use async_graphql::SimpleObject;
-use channel_loader::diesel::{DieselError, DieselLoader};
 use db::schema::{content, users_content};
+use deque_loader::diesel::{DieselError, DieselLoader};
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
 use std::{collections::HashMap, sync::Arc};

@@ -1,6 +1,6 @@
 //! ```rust
 //! use async_graphql::SimpleObject;
-//! use channel_loader::diesel::{DieselError, DieselLoader};
+//! use deque_loader::diesel::{DieselError, DieselLoader};
 //! use db::schema::users;
 //! use diesel::prelude::*;
 //! use diesel_connection::PooledConnection;

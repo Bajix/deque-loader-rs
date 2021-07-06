@@ -3,7 +3,7 @@ use async_graphql::{
   http::{playground_source, GraphQLPlaygroundConfig},
 };
 use async_graphql_warp::{BadRequest, Response};
-use channel_loader::graphql::insert_loader_caches;
+use deque_loader::graphql::insert_loader_caches;
 use http::StatusCode;
 use schema::{EmptySubscription, MutationRoot, QueryRoot, Schema};
 use std::convert::Infallible;
@@ -14,7 +14,7 @@ extern crate diesel;
 #[macro_use]
 extern crate derive_id;
 #[macro_use]
-extern crate channel_loader;
+extern crate deque_loader;
 
 extern crate log;
 extern crate pretty_env_logger;

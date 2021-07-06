@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
-use channel_loader::{diesel::SimpleDieselError, Loadable};
+use deque_loader::{diesel::SimpleDieselError, Loadable};
 
 #[derive(Default)]
 pub struct QueryRoot;

@@ -1,7 +1,7 @@
 use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
-use channel_loader::diesel::SimpleDieselError;
 use db::schema::{content, users, users_content};
+use deque_loader::diesel::SimpleDieselError;
 use diesel::prelude::*;
 use diesel_connection::get_connection;
 use tokio::task::spawn_blocking;

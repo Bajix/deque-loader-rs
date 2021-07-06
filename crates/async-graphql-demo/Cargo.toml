@@ -1,5 +1,5 @@
 [package]
-authors = [ "Thomas Sieverding <Thomas@bajix.com>" ]
+authors = ["Thomas Sieverding <Thomas@bajix.com>"]
 name = "async_graphql_demo"
 version = "0.1.0"
 edition = "2018"
@@ -7,14 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-graphql = {version = "2.9.6", features = ["apollo_tracing"]}
+async-graphql = { version="2.9.6", features=["apollo_tracing"] }
 async-graphql-warp = "2.9.6"
 booter = "1.1.1"
-channel-loader = { path = "../../channel-loader", features = ["postgres", "tracing", "graphql"]}
-db = { path = "../db" }
+deque-loader = { path="../../deque-loader", features=["postgres", "tracing", "graphql"] }
+db = { path="../db" }
 derive-id = "0.1.6"
-diesel = { version = "1.4.7", features = [ "postgres", "chrono", "r2d2" ] }
-diesel-connection = { version = "1.0.5", features = ["postgres", "tracing"] }
+diesel = { version="1.4.7", features=["postgres", "chrono", "r2d2"] }
+diesel-connection = { version="1.0.5", features=["postgres", "tracing"] }
 dotenv = "0.15.0"
 http = "0.2.4"
 inventory = "0.1.10"
@@ -22,6 +22,5 @@ log = "0.4.14"
 pretty_env_logger = "0.4.0"
 serde = "1.0.126"
 static_init = "1.0.1"
-tokio = { version = "1.8.0", features = [ "macros", "rt-multi-thread" ] }
+tokio = { version="1.8.0", features=["macros", "rt-multi-thread"] }
 warp = "0.3.1"
-

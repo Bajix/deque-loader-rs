@@ -1,11 +1,11 @@
 use async_graphql::{
   ComplexObject, Context, ErrorExtensions, FieldResult, InputObject, SimpleObject,
 };
-use channel_loader::{
+use db::schema::users;
+use deque_loader::{
   diesel::{DieselError, DieselLoader},
   Loadable,
 };
-use db::schema::users;
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
 use std::{collections::HashMap, sync::Arc};
