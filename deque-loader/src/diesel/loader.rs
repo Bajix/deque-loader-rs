@@ -1,11 +1,7 @@
-use super::error::{DieselError, SimpleDieselError};
-use crate::{
-  key::Key,
-  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
-};
-use diesel_connection::{get_connection, PooledConnection};
+use super::error::DieselError;
+use crate::key::Key;
+use diesel_connection::PooledConnection;
 use std::{collections::HashMap, sync::Arc};
-use tokio::task::spawn_blocking;
 
 /// a [`diesel`] specific loader interface using [`diesel_connection::get_connection`] for connection acquisition
 pub trait DieselLoader: Sized + Send + Sync {
@@ -18,33 +14,40 @@ pub trait DieselLoader: Sized + Send + Sync {
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError>;
 }
 
-#[async_trait::async_trait]
-impl<T> TaskHandler for T
-where
-  T: DieselLoader + 'static,
-{
-  type Key = T::Key;
-  type Value = T::Value;
-  type Error = SimpleDieselError;
-  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
+/// Setup thread local [`DataLoader`] instances using a [`DieselLoader`] to define the [`TaskHandler`]
+#[macro_export]
+macro_rules! define_diesel_loader {
+  ($loader:ty) => {
+    #[$crate::async_trait::async_trait]
+    impl $crate::task::TaskHandler for $loader {
+      type Key = <$loader as $crate::diesel::DieselLoader>::Key;
+      type Value = <$loader as $crate::diesel::DieselLoader>::Value;
+      type Error = $crate::diesel::SimpleDieselError;
+      const CORES_PER_WORKER_GROUP: usize = <$loader as DieselLoader>::CORES_PER_WORKER_GROUP;
 
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
-    spawn_blocking(move || {
-      let conn = get_connection();
+      async fn handle_task(
+        task: $crate::task::Task<$crate::task::PendingAssignment<Self>>,
+      ) -> $crate::task::Task<$crate::task::CompletionReceipt<Self>> {
+        tokio::task::spawn_blocking(move || {
+          let conn = $crate::diesel_connection::get_connection();
 
-      match task.get_assignment() {
-        TaskAssignment::LoadBatch(task) => match conn {
-          Ok(conn) => {
-            let keys = task.keys();
-            let result = T::load(conn, keys).map_err(|err| err.into());
-            task.resolve(result)
+          match task.get_assignment() {
+            $crate::task::TaskAssignment::LoadBatch(task) => match conn {
+              Ok(conn) => {
+                let keys = task.keys();
+                let result = <$loader>::load(conn, keys).map_err(|err| err.into());
+                task.resolve(result)
+              }
+              Err(err) => task.resolve(Err(err.into())),
+            },
+            $crate::task::TaskAssignment::NoAssignment(receipt) => receipt,
           }
-          Err(err) => task.resolve(Err(err.into())),
-        },
-        TaskAssignment::NoAssignment(receipt) => receipt,
+        })
+        .await
+        .unwrap()
       }
-    })
-    .await
-    .unwrap()
-  }
+    }
+
+    $crate::define_static_loader!($loader);
+  };
 }

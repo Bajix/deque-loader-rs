@@ -33,7 +33,7 @@ macro_rules! define_static_loader {
   };
 }
 
-/// Implements [`Loadable`] using the current thread local [`DataLoader`] as defined by [`define_static_loader`]
+/// Implements [`Loadable`] using the current thread local [`DataLoader`]
 #[macro_export]
 macro_rules! attach_loader {
   ($loadable:ty, $loader:ty) => {

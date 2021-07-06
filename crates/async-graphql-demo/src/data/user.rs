@@ -68,7 +68,7 @@ impl DieselLoader for UserLoader {
   }
 }
 
-define_static_loader!(UserLoader);
+define_diesel_loader!(UserLoader);
 attach_loader!(User, UserLoader);
 pub struct UsersLoader;
 
@@ -92,5 +92,5 @@ impl DieselLoader for UsersLoader {
   }
 }
 
-define_static_loader!(UsersLoader);
+define_diesel_loader!(UsersLoader);
 attach_loader!(User, UsersLoader);

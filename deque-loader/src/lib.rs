@@ -44,26 +44,28 @@
 //!   }
 //! }
 //!
-//! define_static_loader!(UserLoader);
+//! define_diesel_loader!(UserLoader);
 //! attach_loader!(User, UserLoader);
 //! ```
 
 #![allow(dead_code)]
 #[doc(hidden)]
-pub extern crate async_trait;
-#[cfg(feature = "diesel-loader")]
 #[allow(rustdoc::private_intra_doc_links)]
+pub extern crate async_trait;
+#[doc(hidden)]
+#[cfg(feature = "diesel-loader")]
+pub extern crate diesel_connection;
 #[doc(hidden)]
 pub extern crate paste;
 #[doc(hidden)]
 pub extern crate static_init;
+#[cfg(feature = "diesel-loader")]
 pub mod diesel;
 #[cfg(feature = "graphql")]
 pub mod graphql;
 mod key;
 #[doc(hidden)]
 pub mod loadable;
-#[doc(hidden)]
 pub mod loader;
 #[doc(hidden)]
 pub mod request;

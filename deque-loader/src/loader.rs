@@ -6,7 +6,7 @@ use crate::{
 use crossbeam::deque::Worker;
 use std::{sync::Arc, thread::LocalKey};
 use tokio::sync::{oneshot, watch};
-/// Core load channel responsible for receiving incoming load_by requests to be enqueued via thread local [`crossbeam::deque::Worker`] queues
+/// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
 pub struct DataLoader<T: TaskHandler> {
   queue: Worker<Request<T>>,
   queue_handle: &'static QueueHandle<T>,
