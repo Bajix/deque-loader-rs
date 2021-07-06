@@ -17,7 +17,7 @@ pub trait TaskHandler: Sized + Send + Sync + 'static {
 pub struct Task<T>(pub(crate) T);
 /// A handle for deferred task assignment via work-stealing. Task assignement is deferred until connection acquisition to allow for opportunistic batching to occur
 pub struct PendingAssignment<T: TaskHandler> {
-  queue_handle: Arc<QueueHandle<T>>,
+  queue_handle: &'static QueueHandle<T>,
 }
 
 /// A batch of load requests, unique by key, to be loaded and the result resolved
@@ -43,7 +43,7 @@ where
   T: TaskHandler,
 {
   #[must_use]
-  pub(crate) fn new(queue_handle: Arc<QueueHandle<T>>) -> Self {
+  pub(crate) fn new(queue_handle: &'static QueueHandle<T>) -> Self {
     Task(PendingAssignment { queue_handle })
   }
 

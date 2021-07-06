@@ -8,27 +8,24 @@ use std::{sync::Arc, thread::LocalKey};
 use tokio::sync::{oneshot, watch};
 /// Core load channel responsible for receiving incoming load_by requests to be enqueued via thread local [`crossbeam::deque::Worker`] queues
 pub struct DataLoader<T: TaskHandler> {
-  pub(crate) queue: Worker<Request<T>>,
-  pub(crate) queue_handle: Arc<QueueHandle<T>>,
+  queue: Worker<Request<T>>,
+  queue_handle: &'static QueueHandle<T>,
 }
 
 impl<T> DataLoader<T>
 where
   T: TaskHandler,
 {
-  pub fn new() -> Self {
-    let queue = Worker::new_fifo();
-    let queue_handle = Arc::new(QueueHandle::new(vec![queue.stealer()]));
-
-    Self {
-      queue_handle,
+  pub fn new(queue: Worker<Request<T>>, queue_handle: &'static QueueHandle<T>) -> Self {
+    DataLoader {
       queue,
+      queue_handle,
     }
   }
 
   pub fn from_registry(registry: &'static WorkerRegistry<T>) -> Self {
     registry
-      .create_local_loader()
+      .take_loader()
       .expect("There can only be at most one thread local DataLoader per CPU core")
   }
 
@@ -39,7 +36,7 @@ where
     let (req, rx) = Request::<T>::new_oneshot(key);
 
     if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-      let task = Task::new(self.queue_handle.clone());
+      let task = Task::new(self.queue_handle);
       tokio::task::spawn(async move {
         T::handle_task(task).await;
       });
@@ -58,7 +55,7 @@ where
 
     if let Some(req) = req {
       if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-        let task = Task::new(self.queue_handle.clone());
+        let task = Task::new(self.queue_handle);
         tokio::task::spawn(async move {
           T::handle_task(task).await;
         });

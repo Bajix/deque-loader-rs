@@ -7,7 +7,7 @@ use crossbeam::{
 use itertools::Itertools;
 use num::Integer;
 use rayon::prelude::*;
-use std::{iter, sync::Arc};
+use std::iter;
 pub struct QueueHandle<T: TaskHandler> {
   pub(crate) queue_size: AtomicCell<usize>,
   stealers: Vec<Stealer<Request<T>>>,
@@ -17,7 +17,7 @@ impl<T> QueueHandle<T>
 where
   T: TaskHandler,
 {
-  pub(crate) fn new(stealers: Vec<Stealer<Request<T>>>) -> Self {
+  fn new(stealers: Vec<Stealer<Request<T>>>) -> Self {
     QueueHandle {
       queue_size: AtomicCell::new(0),
       stealers,
@@ -53,7 +53,7 @@ where
 }
 
 pub struct WorkerGroup<T: TaskHandler> {
-  handle: Arc<QueueHandle<T>>,
+  queue_handle: QueueHandle<T>,
   workers: Vec<AtomicTake<Worker<Request<T>>>>,
 }
 
@@ -68,11 +68,14 @@ where
 
     let stealers = workers.iter().map(|worker| worker.stealer()).collect_vec();
 
-    let handle = Arc::new(QueueHandle::new(stealers));
+    let queue_handle = QueueHandle::new(stealers);
 
     let workers = workers.into_iter().map(AtomicTake::new).collect_vec();
 
-    WorkerGroup::<T> { handle, workers }
+    WorkerGroup::<T> {
+      queue_handle,
+      workers,
+    }
   }
 }
 
@@ -105,7 +108,7 @@ where
   }
 
   /// Take pre-allocated workers by cycling through groups
-  pub(crate) fn create_local_loader(&'static self) -> Option<DataLoader<T>> {
+  pub(crate) fn take_loader(&'static self) -> Option<DataLoader<T>> {
     let WorkerRegistry {
       claim_counter,
       worker_groups,
@@ -117,26 +120,14 @@ where
 
     let slot = claim_counter.fetch_add(1);
 
-    if slot >= core_count {
-      return None;
-    }
-
     let group_index = slot % group_count;
     let worker_index = slot.div_floor(&group_count);
 
-    let worker_group = worker_groups.get(group_index).unwrap();
-    let queue = worker_group
-      .workers
-      .get(worker_index)
-      .unwrap()
-      .take()
-      .unwrap();
+    let worker_group = worker_groups.get(group_index)?;
+    let queue = worker_group.workers.get(worker_index)?.take()?;
 
-    let queue_handle = worker_group.handle.clone();
+    let queue_handle = &worker_group.queue_handle;
 
-    Some(DataLoader {
-      queue,
-      queue_handle,
-    })
+    Some(DataLoader::new(queue, queue_handle))
   }
 }
