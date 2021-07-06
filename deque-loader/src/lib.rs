@@ -59,6 +59,7 @@ pub extern crate diesel_connection;
 pub extern crate paste;
 #[doc(hidden)]
 pub extern crate static_init;
+pub mod batch;
 #[cfg(feature = "diesel-loader")]
 pub mod diesel;
 #[cfg(feature = "graphql")]
