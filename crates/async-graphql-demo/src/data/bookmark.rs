@@ -40,5 +40,5 @@ impl DieselLoader for BookmarkLoader {
   }
 }
 
-define_diesel_loader!(BookmarkLoader);
+define_static_loader!(BookmarkLoader);
 attach_loader!(Bookmark, BookmarkLoader);

@@ -1,9 +1,12 @@
-use crate::Key;
+use crate::{
+  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
+  Key,
+};
 use std::{collections::HashMap, sync::Arc};
 
 /// Simplified TaskHandler interface
 #[async_trait::async_trait]
-pub trait BatchLoader: Sized + Send + Sync {
+pub trait BatchLoader: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
@@ -12,33 +15,26 @@ pub trait BatchLoader: Sized + Send + Sync {
 }
 
 /// Setup thread local [`DataLoader`] instances using a [`BatchLoader`] to define the [`TaskHandler`]
-#[macro_export]
-macro_rules! define_batch_loader {
-  ($loader:ty) => {
-    #[$crate::async_trait::async_trait]
-    impl $crate::task::TaskHandler for $loader {
-      type Key = <$loader as $crate::batch::BatchLoader>::Key;
-      type Value = <$loader as $crate::batch::BatchLoader>::Value;
-      type Error = <$loader as $crate::batch::BatchLoader>::Error;
-      const CORES_PER_WORKER_GROUP: usize =
-        <$loader as $crate::batch::BatchLoader>::CORES_PER_WORKER_GROUP;
+#[async_trait::async_trait]
+impl<T> TaskHandler for T
+where
+  T: BatchLoader,
+{
+  type Key = T::Key;
+  type Value = T::Value;
+  type Error = T::Error;
+  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
-      async fn handle_task(
-        task: $crate::task::Task<$crate::task::PendingAssignment<Self>>,
-      ) -> $crate::task::Task<$crate::task::CompletionReceipt<Self>> {
-        match task.get_assignment() {
-          $crate::task::TaskAssignment::LoadBatch(task) => {
-            let keys = task.keys();
-            let result = <$loader>::load(keys).await;
-            task.resolve(result)
-          }
-          $crate::task::TaskAssignment::NoAssignment(receipt) => receipt,
-        }
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>> {
+    match task.get_assignment() {
+      TaskAssignment::LoadBatch(task) => {
+        let keys = task.keys();
+        let result = T::load(keys).await;
+        task.resolve(result)
       }
+      TaskAssignment::NoAssignment(receipt) => receipt,
     }
-
-    $crate::define_static_loader!($loader);
-  };
+  }
 }
 
 #[cfg(test)]
@@ -70,7 +66,7 @@ mod tests {
     }
   }
 
-  define_batch_loader!(Loader);
+  define_static_loader!(Loader);
   attach_loader!(BatchSize, Loader);
 
   #[tokio::test]
