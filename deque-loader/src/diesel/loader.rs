@@ -17,9 +17,11 @@ pub trait DieselLoader: Sized + Send + Sync + 'static {
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError>;
 }
 
+pub struct DieselDataLoader<T: DieselLoader>(pub T);
+
 /// Setup thread local [`DataLoader`] instances using a [`DieselLoader`] to define the [`TaskHandler`]
 #[async_trait::async_trait]
-impl<T> TaskHandler for T
+impl<T> TaskHandler for DieselDataLoader<T>
 where
   T: DieselLoader,
 {
