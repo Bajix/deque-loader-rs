@@ -1,11 +1,10 @@
 use crate::{
-  request::{LoadCache, LoadState, Request},
+  request::{LoadCache, OneshotReceiver, Request, WatchReceiver},
   task::{Task, TaskHandler},
   worker::{QueueHandle, WorkerRegistry},
 };
 use crossbeam::deque::Worker;
-use std::{sync::Arc, thread::LocalKey};
-use tokio::sync::{oneshot, watch};
+use std::thread::LocalKey;
 /// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
 pub struct DataLoader<T: TaskHandler> {
   queue: Worker<Request<T>>,
@@ -29,7 +28,7 @@ where
       .expect("There can only be at most one thread local DataLoader per CPU core")
   }
 
-  pub fn load_by(&self, key: T::Key) -> oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>
+  pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T>
   where
     T: TaskHandler,
   {
@@ -47,7 +46,7 @@ where
     rx
   }
 
-  pub fn cached_load_by(&self, key: T::Key, cache: &LoadCache<T>) -> watch::Receiver<LoadState<T>>
+  pub fn cached_load_by(&self, key: T::Key, cache: &LoadCache<T>) -> WatchReceiver<T>
   where
     T: TaskHandler,
   {
@@ -64,7 +63,7 @@ where
       self.queue.push(req);
     }
 
-    rx
+    rx.into()
   }
 }
 

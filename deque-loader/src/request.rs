@@ -7,6 +7,56 @@ pub enum LoadState<T: TaskHandler> {
   Ready(Result<Option<Arc<T::Value>>, T::Error>),
   Pending,
 }
+
+#[derive(Clone)]
+pub struct WatchReceiver<T: TaskHandler>(watch::Receiver<LoadState<T>>);
+
+pub struct OneshotReceiver<T: TaskHandler>(
+  oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>,
+);
+
+impl<T> From<watch::Receiver<LoadState<T>>> for WatchReceiver<T>
+where
+  T: TaskHandler,
+{
+  fn from(rx: watch::Receiver<LoadState<T>>) -> Self {
+    WatchReceiver(rx)
+  }
+}
+
+impl<T> From<oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>> for OneshotReceiver<T>
+where
+  T: TaskHandler,
+{
+  fn from(rx: oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>) -> Self {
+    OneshotReceiver(rx)
+  }
+}
+
+impl<T> WatchReceiver<T>
+where
+  T: TaskHandler,
+{
+  pub async fn recv(mut self) -> Result<Option<Arc<T::Value>>, T::Error> {
+    loop {
+      if let LoadState::Ready(ref result) = *self.0.borrow() {
+        break result.to_owned();
+      }
+
+      self.0.changed().await.unwrap();
+    }
+  }
+}
+
+impl<T> OneshotReceiver<T>
+where
+  T: TaskHandler,
+{
+  pub async fn recv(self) -> Result<Option<Arc<T::Value>>, T::Error> {
+    self.0.await.unwrap()
+  }
+}
+
 pub enum Request<T: TaskHandler> {
   Watch {
     key: T::Key,
@@ -19,25 +69,20 @@ pub enum Request<T: TaskHandler> {
 }
 
 impl<T: TaskHandler> Request<T> {
-  pub(crate) fn new_oneshot(
-    key: T::Key,
-  ) -> (
-    Request<T>,
-    oneshot::Receiver<Result<Option<Arc<T::Value>>, T::Error>>,
-  ) {
+  pub(crate) fn new_oneshot(key: T::Key) -> (Request<T>, OneshotReceiver<T>) {
     let (tx, rx) = oneshot::channel();
 
     let request = Request::Oneshot { key, tx };
 
-    (request, rx)
+    (request, rx.into())
   }
 
-  pub(crate) fn new_watch(key: T::Key) -> (Request<T>, watch::Receiver<LoadState<T>>) {
+  pub(crate) fn new_watch(key: T::Key) -> (Request<T>, WatchReceiver<T>) {
     let (tx, rx) = watch::channel(LoadState::Pending);
 
     let request = Request::Watch { key, tx };
 
-    (request, rx)
+    (request, rx.into())
   }
 
   pub(crate) fn key(&self) -> &T::Key {
@@ -76,21 +121,18 @@ where
     }
   }
 
-  pub(crate) fn get_or_create(
-    &self,
-    key: &T::Key,
-  ) -> (watch::Receiver<LoadState<T>>, Option<Request<T>>) {
+  pub(crate) fn get_or_create(&self, key: &T::Key) -> (WatchReceiver<T>, Option<Request<T>>) {
     let guard = self.data.guard();
 
     loop {
       if let Some(rx) = self.data.get(key, &guard) {
-        break (rx.clone(), None);
+        break (rx.clone().into(), None);
       }
 
       let (req, rx) = Request::<T>::new_watch(key.to_owned());
 
-      match self.data.try_insert(key.clone(), rx, &guard) {
-        Ok(rx) => break (rx.to_owned(), Some(req)),
+      match self.data.try_insert(key.clone(), rx.0, &guard) {
+        Ok(rx) => break (rx.to_owned().into(), Some(req)),
         Err(_) => continue,
       }
     }

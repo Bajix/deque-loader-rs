@@ -47,7 +47,7 @@ macro_rules! attach_loader {
 
         let rx = <$loader as LocalLoader>::loader().with(|loader| loader.load_by(key));
 
-        rx.await.unwrap()
+        rx.recv().await
       }
 
       async fn cached_load_by(
@@ -59,16 +59,10 @@ macro_rules! attach_loader {
       > {
         use $crate::loader::LocalLoader;
 
-        let mut rx =
+        let rx =
           <$loader as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, &cache));
 
-        loop {
-          if let $crate::request::LoadState::Ready(ref result) = *rx.borrow() {
-            break result.to_owned();
-          }
-
-          rx.changed().await.unwrap();
-        }
+        rx.recv().await
       }
     }
   };
