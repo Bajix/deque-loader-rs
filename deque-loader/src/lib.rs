@@ -56,8 +56,6 @@ pub extern crate async_trait;
 #[cfg(feature = "diesel-loader")]
 pub extern crate diesel_connection;
 #[doc(hidden)]
-pub extern crate paste;
-#[doc(hidden)]
 pub extern crate static_init;
 pub mod batch;
 #[cfg(feature = "diesel-loader")]

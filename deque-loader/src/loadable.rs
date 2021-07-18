@@ -16,18 +16,16 @@ pub trait Loadable<T: TaskHandler> {
 #[macro_export]
 macro_rules! define_static_loader {
   ($loader:ty) => {
-    $crate::paste::paste! {
-      #[static_init::dynamic(0)]
-      static [<$loader:snake:upper _REGISTRY>]: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
+    impl $crate::loader::LocalLoader for $loader {
+      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
+        #[static_init::dynamic(0)]
+        static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
 
-      thread_local! {
-        static [<$loader:snake:upper>]: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &[<$loader:snake:upper _REGISTRY>] });
-      }
-
-      impl $crate::loader::LocalLoader for $loader {
-        fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
-          &[<$loader:snake:upper>]
+        thread_local! {
+          static DATA_LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
         }
+
+        &DATA_LOADER
       }
     }
   };
