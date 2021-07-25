@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-graphql = { version="2.9.8", features=["apollo_tracing"] }
-async-graphql-warp = "2.9.8"
+async-graphql = { version="2.9.9", features=["apollo_tracing"] }
+async-graphql-warp = "2.9.9"
 booter = "1.1.1"
 deque-loader = { path="../../deque-loader", features=["postgres", "tracing", "graphql"] }
 db = { path="../db" }
@@ -22,5 +22,5 @@ log = "0.4.14"
 pretty_env_logger = "0.4.0"
 serde = "1.0.126"
 static_init = "1.0.1"
-tokio = { version="1.8.1", features=["macros", "rt-multi-thread"] }
+tokio = { version="1.9.0", features=["macros", "rt-multi-thread"] }
 warp = "0.3.1"

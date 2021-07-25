@@ -3,7 +3,7 @@ use async_graphql::{
 };
 use db::schema::users;
 use deque_loader::{
-  diesel::{DieselError, DieselLoader},
+  diesel::{DieselError, DieselHandler, DieselLoader},
   Loadable,
 };
 use diesel::prelude::*;
@@ -68,8 +68,8 @@ impl DieselLoader for UserLoader {
   }
 }
 
-define_diesel_loader!(UserLoader);
-attach_loader!(User, UserLoader);
+define_static_loader!(UserLoader, DieselHandler<UserLoader>);
+attach_handler!(User, DieselHandler<UserLoader>);
 pub struct UsersLoader;
 
 impl DieselLoader for UsersLoader {
@@ -92,5 +92,5 @@ impl DieselLoader for UsersLoader {
   }
 }
 
-define_diesel_loader!(UsersLoader);
-attach_loader!(User, UsersLoader);
+define_static_loader!(UsersLoader, DieselHandler<UsersLoader>);
+attach_handler!(User, DieselHandler<UsersLoader>);

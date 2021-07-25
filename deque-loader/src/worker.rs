@@ -114,9 +114,7 @@ where
       worker_groups,
     } = self;
 
-    let core_count = num_cpus::get();
-    let group_size = T::CORES_PER_WORKER_GROUP.min(core_count.div_ceil(&2));
-    let group_count = core_count.div_ceil(&group_size);
+    let group_count = self.worker_groups.len();
 
     let slot = claim_counter.fetch_add(1);
 

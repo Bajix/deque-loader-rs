@@ -5,6 +5,7 @@ use crate::{
 };
 use crossbeam::deque::Worker;
 use std::thread::LocalKey;
+
 /// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
 pub struct DataLoader<T: TaskHandler> {
   queue: Worker<Request<T>>,
@@ -28,10 +29,7 @@ where
       .expect("There can only be at most one thread local DataLoader per CPU core")
   }
 
-  pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T>
-  where
-    T: TaskHandler,
-  {
+  pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T> {
     let (req, rx) = Request::<T>::new_oneshot(key);
 
     if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
@@ -46,10 +44,7 @@ where
     rx
   }
 
-  pub fn cached_load_by(&self, key: T::Key, cache: &LoadCache<T>) -> WatchReceiver<T>
-  where
-    T: TaskHandler,
-  {
+  pub fn cached_load_by(&self, key: T::Key, cache: &LoadCache<T>) -> WatchReceiver<T> {
     let (rx, req) = cache.get_or_create(&key);
 
     if let Some(req) = req {
@@ -68,7 +63,6 @@ where
 }
 
 pub trait LocalLoader {
-  fn loader() -> &'static LocalKey<DataLoader<Self>>
-  where
-    Self: TaskHandler;
+  type Handler: TaskHandler;
+  fn loader() -> &'static LocalKey<DataLoader<Self::Handler>>;
 }

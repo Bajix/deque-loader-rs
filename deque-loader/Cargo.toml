@@ -2,7 +2,7 @@
 authors = ["Thomas Sieverding <Thomas@bajix.com>"]
 edition = "2018"
 name = "deque-loader"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 description = "Efficient data loading via work stealing and thread local deques"
 readme = "../README.md"
 license = "MIT"
@@ -25,6 +25,7 @@ rayon = "1.5.1"
 static_init = "1.0.1"
 thiserror = "1.0.26"
 tokio = { version="1", features=["rt", "sync", "time", "macros"] }
+type-equals = "0.1.0"
 
 [features]
 default = ["diesel-loader", "graphql"]

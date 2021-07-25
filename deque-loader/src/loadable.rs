@@ -15,14 +15,15 @@ pub trait Loadable<T: TaskHandler> {
 /// Thread local [`DataLoader`] instances grouped into worker groups and statically pre-allocated per core as to be lock free
 #[macro_export]
 macro_rules! define_static_loader {
-  ($loader:ty) => {
+  ($loader:ty, $handler:ty) => {
     impl $crate::loader::LocalLoader for $loader {
-      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<$loader>> {
+      type Handler = $handler;
+      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<Self::Handler>> {
         #[static_init::dynamic(0)]
-        static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$loader> = $crate::worker::WorkerRegistry::new();
+        static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$handler> = $crate::worker::WorkerRegistry::new();
 
         thread_local! {
-          static DATA_LOADER: $crate::loader::DataLoader<$loader> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+          static DATA_LOADER: $crate::loader::DataLoader<$handler> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
         }
 
         &DATA_LOADER
@@ -33,7 +34,7 @@ macro_rules! define_static_loader {
 
 /// Implements [`Loadable`] using the current thread local [`DataLoader`]
 #[macro_export]
-macro_rules! attach_loader {
+macro_rules! attach_handler {
   ($loadable:ty, $loader:ty) => {
     #[$crate::async_trait::async_trait]
     impl $crate::loadable::Loadable<$loader> for $loadable {
@@ -60,7 +61,7 @@ macro_rules! attach_loader {
         use $crate::loader::LocalLoader;
 
         let rx =
-          <$loader as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, &cache));
+          <$loader as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, cache));
 
         rx.recv().await
       }
@@ -84,10 +85,7 @@ mod tests {
     type Key = i32;
     type Value = BatchSize;
     type Error = ();
-
-    async fn handle_task(
-      task: Task<PendingAssignment<BatchLoader>>,
-    ) -> Task<CompletionReceipt<BatchLoader>> {
+    async fn handle_task(task: Task<PendingAssignment<BatchLoader>>) -> Task<CompletionReceipt> {
       match task.get_assignment() {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, Arc<BatchSize>> = HashMap::new();
@@ -107,8 +105,8 @@ mod tests {
     }
   }
 
-  define_static_loader!(BatchLoader);
-  attach_loader!(BatchSize, BatchLoader);
+  define_static_loader!(BatchLoader, BatchLoader);
+  attach_handler!(BatchSize, BatchLoader);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {

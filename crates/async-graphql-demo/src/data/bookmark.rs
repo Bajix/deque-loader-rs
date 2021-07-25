@@ -1,7 +1,7 @@
 use super::{Content, User, UserId};
 use async_graphql::SimpleObject;
 use db::schema::{content, users_content};
-use deque_loader::diesel::{DieselError, DieselLoader};
+use deque_loader::diesel::{DieselError, DieselHandler, DieselLoader};
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
 use std::{collections::HashMap, sync::Arc};
@@ -40,5 +40,5 @@ impl DieselLoader for BookmarkLoader {
   }
 }
 
-define_diesel_loader!(BookmarkLoader);
-attach_loader!(Bookmark, BookmarkLoader);
+define_static_loader!(BookmarkLoader, DieselHandler<BookmarkLoader>);
+attach_handler!(Bookmark, DieselHandler<BookmarkLoader>);

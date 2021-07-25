@@ -1,10 +1,14 @@
-use super::error::DieselError;
-use crate::key::Key;
-use diesel_connection::PooledConnection;
+use super::{error::DieselError, SimpleDieselError};
+use crate::{
+  key::Key,
+  loader::{DataLoader, LocalLoader},
+  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
+};
+use diesel_connection::{get_connection, PooledConnection};
 use std::{collections::HashMap, sync::Arc};
 
 /// a [`diesel`] specific loader interface using [`diesel_connection::get_connection`] for connection acquisition
-pub trait DieselLoader: Sized + Send + Sync {
+pub trait DieselLoader: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   const CORES_PER_WORKER_GROUP: usize = 4;
@@ -13,41 +17,45 @@ pub trait DieselLoader: Sized + Send + Sync {
     keys: Vec<Self::Key>,
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError>;
 }
+pub struct DieselHandler<T: DieselLoader>(T);
 
-/// Setup thread local [`DataLoader`] instances using a [`DieselLoader`] to define the [`TaskHandler`]
-#[macro_export]
-macro_rules! define_diesel_loader {
-  ($loader:ty) => {
-    #[$crate::async_trait::async_trait]
-    impl $crate::task::TaskHandler for $loader {
-      type Key = <$loader as $crate::diesel::DieselLoader>::Key;
-      type Value = <$loader as $crate::diesel::DieselLoader>::Value;
-      type Error = $crate::diesel::SimpleDieselError;
-      const CORES_PER_WORKER_GROUP: usize = <$loader as DieselLoader>::CORES_PER_WORKER_GROUP;
+#[async_trait::async_trait]
+impl<T> TaskHandler for DieselHandler<T>
+where
+  T: DieselLoader,
+{
+  type Key = T::Key;
+  type Value = T::Value;
+  type Error = SimpleDieselError;
+  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
-      async fn handle_task(
-        task: $crate::task::Task<$crate::task::PendingAssignment<Self>>,
-      ) -> $crate::task::Task<$crate::task::CompletionReceipt<Self>> {
-        tokio::task::spawn_blocking(move || {
-          let conn = $crate::diesel_connection::get_connection();
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt> {
+    tokio::task::spawn_blocking(move || {
+      let conn = get_connection();
 
-          match task.get_assignment() {
-            $crate::task::TaskAssignment::LoadBatch(task) => match conn {
-              Ok(conn) => {
-                let keys = task.keys();
-                let result = <$loader>::load(conn, keys).map_err(|err| err.into());
-                task.resolve(result)
-              }
-              Err(err) => task.resolve(Err(err.into())),
-            },
-            $crate::task::TaskAssignment::NoAssignment(receipt) => receipt,
+      match task.get_assignment() {
+        TaskAssignment::LoadBatch(task) => match conn {
+          Ok(conn) => {
+            let keys = task.keys();
+            let result = T::load(conn, keys).map_err(|err| err.into());
+            task.resolve(result)
           }
-        })
-        .await
-        .unwrap()
+          Err(err) => task.resolve(Err(err.into())),
+        },
+        TaskAssignment::NoAssignment(receipt) => receipt,
       }
-    }
+    })
+    .await
+    .unwrap()
+  }
+}
 
-    $crate::define_static_loader!($loader);
-  };
+impl<Loader> LocalLoader for DieselHandler<Loader>
+where
+  Loader: DieselLoader + LocalLoader,
+{
+  type Handler = <Loader as LocalLoader>::Handler;
+  fn loader() -> &'static std::thread::LocalKey<DataLoader<Self::Handler>> {
+    Loader::loader()
+  }
 }

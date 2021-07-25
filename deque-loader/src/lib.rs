@@ -45,7 +45,7 @@
 //! }
 //!
 //! define_diesel_loader!(UserLoader);
-//! attach_loader!(User, UserLoader);
+//! attach_handler!(User, UserLoader);
 //! ```
 
 #![allow(dead_code)]

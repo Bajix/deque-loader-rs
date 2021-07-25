@@ -11,7 +11,7 @@ pub trait TaskHandler: Sized + Send + Sync + 'static {
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
   const CORES_PER_WORKER_GROUP: usize = 4;
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt<Self>>;
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt>;
 }
 
 pub struct Task<T>(pub(crate) T);
@@ -26,16 +26,14 @@ pub struct LoadBatch<T: TaskHandler> {
 }
 /// An acknowledgement of task completion as to enforce a design contract that allows ownership of requests to be taken by the task handler.
 /// This is a workaround to [rust-lang/rust#59337](https://github.com/rust-lang/rust/issues/59337) that enables task assignment to occur within a [`tokio::task::spawn_blocking`] closure
-pub struct CompletionReceipt<T: TaskHandler> {
-  loader: PhantomData<fn() -> T>,
-}
+pub struct CompletionReceipt(PhantomData<fn() -> ()>);
 
 /// A conditional assignment of work as a [`LoadBatch`]
 pub enum TaskAssignment<T: TaskHandler> {
   /// A batch of keys to load values for
   LoadBatch(Task<LoadBatch<T>>),
   /// If other task handlers opportunistically resolve all tasks, there will be no task assignment and the handler can drop unused connections for use elsewhere
-  NoAssignment(Task<CompletionReceipt<T>>),
+  NoAssignment(Task<CompletionReceipt>),
 }
 
 impl<T> Task<PendingAssignment<T>>
@@ -92,7 +90,7 @@ where
   pub fn resolve(
     self,
     results: Result<HashMap<T::Key, Arc<T::Value>>, T::Error>,
-  ) -> Task<CompletionReceipt<T>> {
+  ) -> Task<CompletionReceipt> {
     let Task(LoadBatch { requests }) = self;
 
     match results {
@@ -110,17 +108,12 @@ where
       }
     };
 
-    Task::<CompletionReceipt<T>>::resolve_receipt()
+    Task::<CompletionReceipt>::resolve_receipt()
   }
 }
 
-impl<T> Task<CompletionReceipt<T>>
-where
-  T: TaskHandler,
-{
+impl Task<CompletionReceipt> {
   pub(crate) fn resolve_receipt() -> Self {
-    Task(CompletionReceipt {
-      loader: PhantomData,
-    })
+    Task(CompletionReceipt(PhantomData))
   }
 }
