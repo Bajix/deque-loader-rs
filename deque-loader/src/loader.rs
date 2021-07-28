@@ -44,8 +44,12 @@ where
     rx
   }
 
-  pub fn cached_load_by(&self, key: T::Key, cache: &LoadCache<T>) -> WatchReceiver<T> {
-    let (rx, req) = cache.get_or_create(&key);
+  pub fn cached_load_by<Cache: Send + AsRef<LoadCache<T>>>(
+    &self,
+    key: T::Key,
+    cache: Cache,
+  ) -> WatchReceiver<T> {
+    let (rx, req) = cache.as_ref().get_or_create(&key);
 
     if let Some(req) = req {
       if self.queue_handle.queue_size.fetch_add(1).eq(&0) {

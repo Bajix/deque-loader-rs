@@ -6,9 +6,9 @@ use std::sync::Arc;
 pub trait Loadable<T: TaskHandler> {
   /// Load a value by it's key in a batched load. If no [`TaskHandler`] is pending assignment, one will be scheduled. Even though this is scheduled up front, task assignment is deferred and will capture all loads that come thereafter; for a given request, it is guaranteed all loads will be enqueued before task assigment and batched optimally.
   async fn load_by(key: T::Key) -> Result<Option<Arc<T::Value>>, T::Error>;
-  async fn cached_load_by(
+  async fn cached_load_by<Cache: Send + AsRef<LoadCache<T>>>(
     key: T::Key,
-    cache: &LoadCache<T>,
+    cache: Cache,
   ) -> Result<Option<Arc<T::Value>>, T::Error>;
 }
 
@@ -51,9 +51,9 @@ macro_rules! attach_handler {
         rx.recv().await
       }
 
-      async fn cached_load_by(
+      async fn cached_load_by<Cache: Send + AsRef<$crate::request::LoadCache<$loader>>>(
         key: <$loader as $crate::task::TaskHandler>::Key,
-        cache: &$crate::request::LoadCache<$loader>,
+        cache: Cache,
       ) -> Result<
         Option<std::sync::Arc<<$loader as $crate::task::TaskHandler>::Value>>,
         <$loader as $crate::task::TaskHandler>::Error,

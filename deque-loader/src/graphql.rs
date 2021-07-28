@@ -30,8 +30,14 @@ pub fn insert_loader_caches(mut request: Request) -> Request {
 
 /// Register cache factory for a [`TaskHandler`] using [`inventory`]. This will require adding [`inventory`] to your dependencies as well.
 #[macro_export]
-macro_rules! define_cache_factory {
-  ($loader:ty) => {
-    inventory::submit!({ $crate::graphql::CacheFactory::new::<$loader>() });
+macro_rules! register_cache_factory {
+  ($handler:ty) => {
+    inventory::submit!({ $crate::graphql::CacheFactory::new::<$handler>() });
+
+    impl AsRef<LoadCache<$handler>> for async_graphql::context::Context<'_> {
+      fn as_ref(&self) -> &LoadCache<$handler> {
+        self.data_unchecked()
+      }
+    }
   };
 }
