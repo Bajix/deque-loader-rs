@@ -2,7 +2,7 @@
 authors = ["Thomas Sieverding <Thomas@bajix.com>"]
 edition = "2018"
 name = "deque-loader"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 description = "Efficient data loading via work stealing and thread local deques"
 readme = "../README.md"
 license = "MIT"
@@ -10,7 +10,7 @@ repository = "https://github.com/Bajix/deque-loader-rs/"
 
 [dependencies]
 async-graphql = { version="2.9", optional=true }
-async-trait = "0.1.50"
+async-trait = "0.1.51"
 atomic-take = "1.0.0"
 crossbeam = "0.8.1"
 diesel = { version="1.4.7", features=["postgres", "r2d2"], optional=true }
@@ -25,7 +25,7 @@ rayon = "1.5.1"
 static_init = "1.0.1"
 thiserror = "1.0.26"
 tokio = { version="1", features=["rt", "sync", "time", "macros"] }
-type-equals = "0.1.0"
+deque-loader-derive = { path = "../deque-loader-derive", version = "0.1.0-beta.3"}
 
 [features]
 default = ["diesel-loader", "graphql"]

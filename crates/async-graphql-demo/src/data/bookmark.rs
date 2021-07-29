@@ -6,16 +6,20 @@ use diesel::prelude::*;
 use diesel_connection::PooledConnection;
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(SimpleObject, Identifiable, Queryable, Associations, Clone)]
+#[derive(SimpleObject, Identifiable, Queryable, Associations, Clone, Loadable)]
 #[belongs_to(UserId, foreign_key = "user_id")]
 #[belongs_to(User, foreign_key = "user_id")]
 #[table_name = "users_content"]
 #[primary_key("user_id")]
+#[data_loader(handler = "DieselHandler<BookmarkLoader>")]
 pub struct Bookmark {
   pub user_id: i32,
   #[diesel(embed)]
   pub content: Content,
 }
+
+#[derive(Loader)]
+#[data_loader(handler = "DieselHandler<BookmarkLoader>")]
 pub struct BookmarkLoader;
 
 impl DieselLoader for BookmarkLoader {
@@ -39,6 +43,3 @@ impl DieselLoader for BookmarkLoader {
     Ok(data)
   }
 }
-
-define_static_loader!(BookmarkLoader, DieselHandler<BookmarkLoader>);
-attach_handler!(Bookmark, DieselHandler<BookmarkLoader>);

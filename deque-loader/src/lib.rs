@@ -1,6 +1,6 @@
 //! ```rust
 //! use async_graphql::SimpleObject;
-//! use deque_loader::diesel::{DieselError, DieselLoader};
+//! use deque_loader::diesel::{DieselError, DieselLoader, DieselHandler};
 //! use db::schema::users;
 //! use diesel::prelude::*;
 //! use diesel_connection::PooledConnection;
@@ -13,7 +13,8 @@
 //!   pub struct UserId( #[column_name = "id"] i32);
 //! }
 //!
-//! #[derive(SimpleObject, Identifiable, Associations, Queryable, Debug, Clone)]
+//! #[derive(SimpleObject, Loadable, Identifiable, Associations, Queryable, Debug, Clone)]
+//! #[data_loader(handler = "DieselHandler<UserLoader>")]
 //! #[belongs_to(UserId, foreign_key = "id")]
 //! #[table_name = "users"]
 //! pub struct User {
@@ -21,6 +22,8 @@
 //!   pub name: String,
 //! }
 //!
+//! #[derive(Loader)]
+//! #[data_loader(handler = "DieselHandler<UserLoader>")]
 //! pub struct UserLoader;
 //!
 //! impl DieselLoader for UserLoader {
@@ -44,8 +47,6 @@
 //!   }
 //! }
 //!
-//! define_diesel_loader!(UserLoader);
-//! attach_handler!(User, UserLoader);
 //! ```
 
 #![allow(dead_code)]
@@ -57,6 +58,9 @@ pub extern crate async_trait;
 pub extern crate diesel_connection;
 #[doc(hidden)]
 pub extern crate static_init;
+
+pub use deque_loader_derive::*;
+
 pub mod batch;
 #[cfg(feature = "diesel-loader")]
 pub mod diesel;
@@ -73,4 +77,4 @@ pub mod task;
 pub mod worker;
 
 pub use key::Key;
-pub use loadable::Loadable;
+pub use loadable::LoadBy;

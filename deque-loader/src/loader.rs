@@ -62,7 +62,7 @@ where
       self.queue.push(req);
     }
 
-    rx.into()
+    rx
   }
 }
 

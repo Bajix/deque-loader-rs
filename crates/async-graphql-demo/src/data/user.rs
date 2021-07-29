@@ -4,7 +4,7 @@ use async_graphql::{
 use db::schema::users;
 use deque_loader::{
   diesel::{DieselError, DieselHandler, DieselLoader},
-  Loadable,
+  LoadBy,
 };
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
@@ -25,10 +25,12 @@ derive_id! {
   pub struct UserId( #[column_name = "id"] i32);
 }
 
-#[derive(SimpleObject, Identifiable, Associations, Queryable, Debug, Clone)]
+#[derive(SimpleObject, Identifiable, Associations, Queryable, Debug, Clone, Loadable)]
 #[graphql(complex)]
 #[belongs_to(UserId, foreign_key = "id")]
 #[table_name = "users"]
+#[data_loader(handler = "DieselHandler<UsersLoader>")]
+#[data_loader(handler = "DieselHandler<UserLoader>")]
 pub struct User {
   pub id: i32,
   pub name: String,
@@ -45,6 +47,8 @@ impl User {
     Ok(bookmarks)
   }
 }
+#[derive(Loader)]
+#[data_loader(handler = "DieselHandler<UserLoader>")]
 pub struct UserLoader;
 
 impl DieselLoader for UserLoader {
@@ -68,8 +72,8 @@ impl DieselLoader for UserLoader {
   }
 }
 
-define_static_loader!(UserLoader, DieselHandler<UserLoader>);
-attach_handler!(User, DieselHandler<UserLoader>);
+#[derive(Loader)]
+#[data_loader(handler = "DieselHandler<UsersLoader>")]
 pub struct UsersLoader;
 
 impl DieselLoader for UsersLoader {
@@ -91,6 +95,3 @@ impl DieselLoader for UsersLoader {
     Ok(data)
   }
 }
-
-define_static_loader!(UsersLoader, DieselHandler<UsersLoader>);
-attach_handler!(User, DieselHandler<UsersLoader>);

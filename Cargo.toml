@@ -8,6 +8,7 @@ opt-level = 3
 [workspace]
 members = [
   "deque-loader",
+  "deque-loader-derive",
   "crates/async-graphql-demo",
   "crates/db"
 ]

@@ -51,18 +51,22 @@ where
 
 #[cfg(test)]
 mod tests {
-  use crate::{attach_handler, define_static_loader, Loadable};
-
   use super::*;
+  use crate::LoadBy;
+  use deque_loader_derive::{Loadable, Loader};
   use std::{collections::HashMap, iter};
   use tokio::try_join;
-  pub struct Loader {}
 
-  #[derive(Clone, Debug, PartialEq, Eq)]
+  #[derive(Loader)]
+  #[data_loader(handler = "BatchHandler<BatchSizeLoader>", internal = true)]
+  pub struct BatchSizeLoader {}
+
+  #[derive(Clone, Debug, PartialEq, Eq, Loadable)]
+  #[data_loader(handler = "BatchHandler<BatchSizeLoader>", internal = true)]
   pub struct BatchSize(usize);
 
   #[async_trait::async_trait]
-  impl BatchLoader for Loader {
+  impl BatchLoader for BatchSizeLoader {
     type Key = i32;
     type Value = BatchSize;
     type Error = ();
@@ -76,9 +80,6 @@ mod tests {
       Ok(data)
     }
   }
-
-  define_static_loader!(Loader, BatchHandler<Loader>);
-  attach_handler!(BatchSize, BatchHandler<Loader>);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {

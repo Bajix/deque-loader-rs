@@ -2,8 +2,8 @@ use crate::{request::LoadCache, task::TaskHandler, Key};
 use std::sync::Arc;
 
 #[async_trait::async_trait]
-/// Use [`attach_handler`] to define
-pub trait Loadable<T, K, V>
+/// Derive with [`deque_loader_derive::Loadable`]
+pub trait LoadBy<T, K, V>
 where
   T: TaskHandler,
   K: Key,
@@ -19,71 +19,22 @@ where
   ) -> Result<Option<Arc<V>>, Self::Error>;
 }
 
-/// Thread local [`DataLoader`] instances grouped into worker groups and statically pre-allocated per core as to be lock free
-#[macro_export]
-macro_rules! define_static_loader {
-  ($loader:ty, $handler:ty) => {
-    impl $crate::loader::LocalLoader for $loader {
-      type Handler = $handler;
-      fn loader() -> &'static std::thread::LocalKey<$crate::loader::DataLoader<Self::Handler>> {
-        #[static_init::dynamic(0)]
-        static WORKER_REGISTRY: $crate::worker::WorkerRegistry<$handler> = $crate::worker::WorkerRegistry::new();
-
-        thread_local! {
-          static DATA_LOADER: $crate::loader::DataLoader<$handler> = $crate::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
-        }
-
-        &DATA_LOADER
-      }
-    }
-  };
-}
-
-/// Implements [`Loadable`] using the current thread local [`DataLoader`]
-#[macro_export]
-macro_rules! attach_handler {
-  ($loadable:ty, $handler:ty) => {
-    #[$crate::async_trait::async_trait]
-    impl
-      $crate::loadable::Loadable<
-        $handler,
-        <$handler as $crate::task::TaskHandler>::Key,
-        <$handler as $crate::task::TaskHandler>::Value,
-      > for $loadable
-    {
-      type Error = <$handler as $crate::task::TaskHandler>::Error;
-      async fn load_by(key: <$handler as $crate::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<$handler as $crate::task::TaskHandler>::Value>>, Self::Error> {
-        use $crate::loader::LocalLoader;
-
-        let rx = <$handler as LocalLoader>::loader().with(|loader| loader.load_by(key));
-
-        rx.recv().await
-      }
-
-      async fn cached_load_by<Cache: Send + AsRef<$crate::request::LoadCache<$handler>>>(
-        key: <$handler as $crate::task::TaskHandler>::Key,
-        cache: Cache,
-      ) -> Result<Option<std::sync::Arc<<$handler as $crate::task::TaskHandler>::Value>>, Self::Error> {
-        use $crate::loader::LocalLoader;
-
-        let rx =
-          <$handler as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, cache));
-
-        rx.recv().await
-      }
-    }
-  };
-}
-
 #[cfg(test)]
 mod tests {
-  use super::*;
-  use crate::task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment};
-  use std::{collections::HashMap, iter};
+  use crate::{
+    loadable::LoadBy,
+    task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
+  };
+  use deque_loader_derive::{Loadable, Loader};
+  use std::{collections::HashMap, iter, sync::Arc};
   use tokio::try_join;
+
+  #[derive(Loader)]
+  #[data_loader(handler = "BatchLoader", internal = true)]
   pub struct BatchLoader {}
 
-  #[derive(Clone, Debug, PartialEq, Eq)]
+  #[derive(Clone, Debug, PartialEq, Eq, Loadable)]
+  #[data_loader(handler = "BatchLoader", internal = true)]
   pub struct BatchSize(usize);
 
   #[async_trait::async_trait]
@@ -110,9 +61,6 @@ mod tests {
       }
     }
   }
-
-  define_static_loader!(BatchLoader, BatchLoader);
-  attach_handler!(BatchSize, BatchLoader);
 
   #[tokio::test]
   async fn it_loads() -> Result<(), ()> {
