@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use crate::data::*;
 use async_graphql::{Context, ErrorExtensions, FieldResult, Object};
-use deque_loader::{
-  diesel::{DieselHandler, SimpleDieselError},
-  Loadable,
-};
+use deque_loader::{diesel::SimpleDieselError, Loadable};
 
 #[derive(Default)]
 pub struct QueryRoot;
@@ -17,7 +14,7 @@ impl QueryRoot {
   }
 
   async fn users(&self, _ctx: &Context<'_>) -> FieldResult<Arc<Vec<User>>> {
-    let users = <User as Loadable<DieselHandler<UsersLoader>>>::load_by(())
+    let users = User::load_by(())
       .await
       .map_err(|err: SimpleDieselError| err.extend())?
       .unwrap_or_else(|| Arc::new(vec![]));

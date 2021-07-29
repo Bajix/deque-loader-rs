@@ -1,15 +1,22 @@
-use crate::{request::LoadCache, task::TaskHandler};
+use crate::{request::LoadCache, task::TaskHandler, Key};
 use std::sync::Arc;
 
-/// Loadable types load using the corresponding static loader associated by type via [`define_static_loader`]
 #[async_trait::async_trait]
-pub trait Loadable<T: TaskHandler> {
+/// Use [`attach_handler`] to define
+pub trait Loadable<T, K, V>
+where
+  T: TaskHandler,
+  K: Key,
+  V: Send + Sync + Clone + 'static,
+{
+  type Error: Send + Sync + Clone + 'static;
   /// Load a value by it's key in a batched load. If no [`TaskHandler`] is pending assignment, one will be scheduled. Even though this is scheduled up front, task assignment is deferred and will capture all loads that come thereafter; for a given request, it is guaranteed all loads will be enqueued before task assigment and batched optimally.
-  async fn load_by(key: T::Key) -> Result<Option<Arc<T::Value>>, T::Error>;
+  async fn load_by(key: K) -> Result<Option<Arc<V>>, Self::Error>;
+  /// Load against a request contextual cache. Use [`register_cache_factory`] and [`crate::graphql::insert_loader_caches`] to hydrate Context<'_> and to define AsRef impl
   async fn cached_load_by<Cache: Send + AsRef<LoadCache<T>>>(
-    key: T::Key,
+    key: K,
     cache: Cache,
-  ) -> Result<Option<Arc<T::Value>>, T::Error>;
+  ) -> Result<Option<Arc<V>>, Self::Error>;
 }
 
 /// Thread local [`DataLoader`] instances grouped into worker groups and statically pre-allocated per core as to be lock free
@@ -35,33 +42,32 @@ macro_rules! define_static_loader {
 /// Implements [`Loadable`] using the current thread local [`DataLoader`]
 #[macro_export]
 macro_rules! attach_handler {
-  ($loadable:ty, $loader:ty) => {
+  ($loadable:ty, $handler:ty) => {
     #[$crate::async_trait::async_trait]
-    impl $crate::loadable::Loadable<$loader> for $loadable {
-      async fn load_by(
-        key: <$loader as $crate::task::TaskHandler>::Key,
-      ) -> Result<
-        Option<std::sync::Arc<<$loader as $crate::task::TaskHandler>::Value>>,
-        <$loader as $crate::task::TaskHandler>::Error,
-      > {
+    impl
+      $crate::loadable::Loadable<
+        $handler,
+        <$handler as $crate::task::TaskHandler>::Key,
+        <$handler as $crate::task::TaskHandler>::Value,
+      > for $loadable
+    {
+      type Error = <$handler as $crate::task::TaskHandler>::Error;
+      async fn load_by(key: <$handler as $crate::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<$handler as $crate::task::TaskHandler>::Value>>, Self::Error> {
         use $crate::loader::LocalLoader;
 
-        let rx = <$loader as LocalLoader>::loader().with(|loader| loader.load_by(key));
+        let rx = <$handler as LocalLoader>::loader().with(|loader| loader.load_by(key));
 
         rx.recv().await
       }
 
-      async fn cached_load_by<Cache: Send + AsRef<$crate::request::LoadCache<$loader>>>(
-        key: <$loader as $crate::task::TaskHandler>::Key,
+      async fn cached_load_by<Cache: Send + AsRef<$crate::request::LoadCache<$handler>>>(
+        key: <$handler as $crate::task::TaskHandler>::Key,
         cache: Cache,
-      ) -> Result<
-        Option<std::sync::Arc<<$loader as $crate::task::TaskHandler>::Value>>,
-        <$loader as $crate::task::TaskHandler>::Error,
-      > {
+      ) -> Result<Option<std::sync::Arc<<$handler as $crate::task::TaskHandler>::Value>>, Self::Error> {
         use $crate::loader::LocalLoader;
 
         let rx =
-          <$loader as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, cache));
+          <$handler as LocalLoader>::loader().with(|loader| loader.cached_load_by(key, cache));
 
         rx.recv().await
       }
