@@ -1,0 +1,58 @@
+use super::get_connection_manager;
+use crate::{
+  key::Key,
+  loader::{DataLoader, LocalLoader},
+  task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
+};
+use redis::{aio::ConnectionManager, ErrorKind, RedisError};
+use std::{collections::HashMap, sync::Arc};
+
+/// a [`redis`] specific loader interface using thread local multiplexed redis connections
+#[async_trait::async_trait]
+pub trait RedisLoader: Sized + Send + Sync + 'static {
+  type Key: Key;
+  type Value: Send + Sync + Clone + 'static;
+  const CORES_PER_WORKER_GROUP: usize = 4;
+  async fn load(
+    conn: ConnectionManager,
+    keys: Vec<Self::Key>,
+  ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, RedisError>;
+}
+pub struct RedisHandler<T: RedisLoader>(T);
+
+#[async_trait::async_trait]
+impl<T> TaskHandler for RedisHandler<T>
+where
+  T: RedisLoader,
+{
+  type Key = T::Key;
+  type Value = T::Value;
+  type Error = ErrorKind;
+  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
+
+  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt> {
+    let conn = get_connection_manager().await;
+
+    match task.get_assignment() {
+      TaskAssignment::LoadBatch(task) => match conn {
+        Ok(conn) => {
+          let keys = task.keys();
+          let result = T::load(conn, keys).await.map_err(|err| err.kind());
+          task.resolve(result)
+        }
+        Err(err) => task.resolve(Err(err)),
+      },
+      TaskAssignment::NoAssignment(receipt) => receipt,
+    }
+  }
+}
+
+impl<Loader> LocalLoader for RedisHandler<Loader>
+where
+  Loader: RedisLoader + LocalLoader,
+{
+  type Handler = <Loader as LocalLoader>::Handler;
+  fn loader() -> &'static std::thread::LocalKey<DataLoader<Self::Handler>> {
+    Loader::loader()
+  }
+}

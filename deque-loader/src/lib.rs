@@ -70,6 +70,8 @@ mod key;
 #[doc(hidden)]
 pub mod loadable;
 pub mod loader;
+#[cfg(feature = "redis-loader")]
+pub mod redis;
 #[doc(hidden)]
 pub mod request;
 pub mod task;
