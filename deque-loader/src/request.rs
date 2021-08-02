@@ -67,10 +67,12 @@ pub enum Request<K: Key, V: Send + Sync + Clone + 'static, E: Send + Sync + Clon
   Watch {
     key: K,
     tx: watch::Sender<LoadState<V, E>>,
+    cache_cb: Option<Box<dyn FnOnce(&K, &V) + Send + Sync>>,
   },
   Oneshot {
     key: K,
     tx: oneshot::Sender<Result<Option<Arc<V>>, E>>,
+    cache_cb: Option<Box<dyn FnOnce(&K, &V) + Send + Sync>>,
   },
 }
 
@@ -83,7 +85,11 @@ where
   pub(crate) fn new_oneshot(key: K) -> (Request<K, V, E>, OneshotReceiver<V, E>) {
     let (tx, rx) = oneshot::channel();
 
-    let request = Request::Oneshot { key, tx };
+    let request = Request::Oneshot {
+      key,
+      tx,
+      cache_cb: None,
+    };
 
     (request, rx.into())
   }
@@ -91,7 +97,11 @@ where
   pub(crate) fn new_watch(key: K) -> (Request<K, V, E>, WatchReceiver<V, E>) {
     let (tx, rx) = watch::channel(LoadState::Pending);
 
-    let request = Request::Watch { key, tx };
+    let request = Request::Watch {
+      key,
+      tx,
+      cache_cb: None,
+    };
 
     (request, rx.into())
   }
@@ -105,26 +115,72 @@ where
 
   pub(crate) fn resolve(self, value: Result<Option<Arc<V>>, E>) {
     match self {
-      Request::Watch { tx, .. } => {
+      Request::Watch { key, tx, cache_cb } => {
+        if let (Ok(Some(value)), Some(cache_cb)) = (&value, cache_cb) {
+          cache_cb(&key, value);
+        }
+
         if !tx.is_closed() {
           tx.send(LoadState::Ready(value)).ok();
         }
       }
-      Request::Oneshot { tx, .. } => {
+      Request::Oneshot { key, tx, cache_cb } => {
+        if let (Ok(Some(value)), Some(cache_cb)) = (&value, cache_cb) {
+          cache_cb(&key, value);
+        }
         if !tx.is_closed() {
           tx.send(value).ok();
         }
       }
     };
   }
-}
-pub struct LoadCache<T: TaskHandler> {
-  data: HashMap<T::Key, watch::Receiver<LoadState<T::Value, T::Error>>>,
+
+  pub(crate) fn set_cache_cb(&mut self, cache_cb: Box<dyn FnOnce(&K, &V) + Send + Sync>) {
+    let value = match self {
+      Request::Watch { cache_cb, .. } => cache_cb,
+      Request::Oneshot { cache_cb, .. } => cache_cb,
+    };
+
+    *value = Some(cache_cb);
+  }
 }
 
-impl<T> LoadCache<T>
+pub struct RequestCache<T>(LoadCache<T::Key, T::Value, T::Error>)
+where
+  T: TaskHandler;
+
+impl<T> AsRef<LoadCache<T::Key, T::Value, T::Error>> for RequestCache<T>
 where
   T: TaskHandler,
+{
+  fn as_ref(&self) -> &LoadCache<T::Key, T::Value, T::Error> {
+    &self.0
+  }
+}
+
+impl<T> RequestCache<T>
+where
+  T: TaskHandler,
+{
+  pub fn new() -> Self {
+    RequestCache(LoadCache::new())
+  }
+}
+
+pub struct LoadCache<K, V, E>
+where
+  K: Key,
+  V: Send + Sync + Clone + 'static,
+  E: Send + Sync + Clone + 'static,
+{
+  data: HashMap<K, watch::Receiver<LoadState<V, E>>>,
+}
+
+impl<K, V, E> LoadCache<K, V, E>
+where
+  K: Key,
+  V: Send + Sync + Clone + 'static,
+  E: Send + Sync + Clone + 'static,
 {
   pub fn new() -> Self {
     LoadCache {
@@ -132,13 +188,7 @@ where
     }
   }
 
-  pub(crate) fn get_or_create(
-    &self,
-    key: &T::Key,
-  ) -> (
-    WatchReceiver<T::Value, T::Error>,
-    Option<Request<T::Key, T::Value, T::Error>>,
-  ) {
+  pub(crate) fn get_or_create(&self, key: &K) -> (WatchReceiver<V, E>, Option<Request<K, V, E>>) {
     let guard = self.data.guard();
 
     loop {

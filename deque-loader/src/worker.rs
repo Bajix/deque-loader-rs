@@ -45,12 +45,16 @@ where
   pub(crate) fn drain_queue(&self) -> Vec<Request<K, V, E>> {
     let mut requests = vec![];
 
-    while self.queue_size.compare_exchange(requests.len(), 0).is_err() {
+    loop {
       let batch = self.collect_tasks();
-      requests.extend(batch.into_iter());
-    }
+      let batch_len = batch.len();
 
-    requests
+      requests.extend(batch.into_iter());
+
+      if self.queue_size.fetch_sub(batch_len).le(&batch_len) {
+        break requests;
+      }
+    }
   }
 }
 

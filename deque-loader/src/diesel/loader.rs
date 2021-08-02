@@ -1,7 +1,7 @@
 use super::{error::DieselError, SimpleDieselError};
 use crate::{
   key::Key,
-  loader::{DataLoader, LocalLoader},
+  loader::{DataLoader, LocalLoader, StoreType},
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use diesel_connection::{get_connection, PooledConnection};
@@ -52,12 +52,13 @@ where
   }
 }
 
-impl<Loader> LocalLoader for DieselHandler<Loader>
+impl<T, Store> LocalLoader<Store> for DieselHandler<T>
 where
-  Loader: DieselLoader + LocalLoader,
+  T: DieselLoader + LocalLoader<Store>,
+  Store: StoreType,
 {
-  type Handler = <Loader as LocalLoader>::Handler;
+  type Handler = <T as LocalLoader<Store>>::Handler;
   fn loader() -> &'static std::thread::LocalKey<DataLoader<Self::Handler>> {
-    Loader::loader()
+    T::loader()
   }
 }

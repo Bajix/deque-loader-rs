@@ -1,3 +1,4 @@
+use super::Bookmark;
 use async_graphql::{
   ComplexObject, Context, ErrorExtensions, FieldResult, InputObject, SimpleObject,
 };
@@ -8,9 +9,8 @@ use deque_loader::{
 };
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
-
-use super::Bookmark;
 
 #[derive(InputObject, Insertable)]
 #[table_name = "users"]
@@ -25,7 +25,17 @@ derive_id! {
   pub struct UserId( #[column_name = "id"] i32);
 }
 
-#[derive(SimpleObject, Identifiable, Associations, Queryable, Debug, Clone, Loadable)]
+#[derive(
+  SimpleObject,
+  Identifiable,
+  Associations,
+  Queryable,
+  Debug,
+  Clone,
+  Loadable,
+  Serialize,
+  Deserialize,
+)]
 #[graphql(complex)]
 #[belongs_to(UserId, foreign_key = "id")]
 #[table_name = "users"]

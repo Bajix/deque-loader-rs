@@ -5,15 +5,15 @@ use tokio::sync::watch;
 
 fn create_client() -> RedisResult<Client> {
   let database_url = env::var("REDIS_URL").unwrap_or_else(|_| {
-    let hostname_env: String =
+    let hostname_env =
       env::var("REDIS_SERVICE_HOSTNAME_ENV").unwrap_or_else(|_| String::from("REDIS_HOSTNAME"));
 
-    let port_env: String =
+    let port_env =
       env::var("REDIS_SERVICE_PORT_ENV").unwrap_or_else(|_| String::from("REDIS_PORT"));
 
-    let hostname: String = env::var(hostname_env).unwrap_or_else(|_| String::from("127.0.0.1"));
+    let hostname = env::var(hostname_env).unwrap_or_else(|_| String::from("127.0.0.1"));
 
-    let port: String = env::var(port_env).unwrap_or_else(|_| String::from("6379"));
+    let port = env::var(port_env).unwrap_or_else(|_| String::from("6379"));
 
     match env::var("REDIS_PASSWORD") {
       Ok(password) => format!("redis://default:{}@{}:{}", password, hostname, port),

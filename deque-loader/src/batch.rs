@@ -1,5 +1,5 @@
 use crate::{
-  loader::{DataLoader, LocalLoader},
+  loader::{DataLoader, LocalLoader, StoreType},
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
   Key,
 };
@@ -41,11 +41,12 @@ where
   }
 }
 
-impl<Loader> LocalLoader for BatchHandler<Loader>
+impl<Loader, Store> LocalLoader<Store> for BatchHandler<Loader>
 where
-  Loader: BatchLoader + LocalLoader,
+  Loader: BatchLoader + LocalLoader<Store>,
+  Store: StoreType,
 {
-  type Handler = <Loader as LocalLoader>::Handler;
+  type Handler = <Loader as LocalLoader<Store>>::Handler;
   fn loader() -> &'static std::thread::LocalKey<DataLoader<Self::Handler>> {
     Loader::loader()
   }

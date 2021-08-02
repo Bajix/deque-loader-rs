@@ -1,7 +1,7 @@
 use super::get_connection_manager;
 use crate::{
   key::Key,
-  loader::{DataLoader, LocalLoader},
+  loader::{DataLoader, LocalLoader, StoreType},
   task::{CompletionReceipt, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
 use redis::{aio::ConnectionManager, ErrorKind, RedisError};
@@ -49,11 +49,12 @@ where
   }
 }
 
-impl<Loader> LocalLoader for RedisHandler<Loader>
+impl<Loader, Store> LocalLoader<Store> for RedisHandler<Loader>
 where
-  Loader: RedisLoader + LocalLoader,
+  Loader: RedisLoader + LocalLoader<Store>,
+  Store: StoreType,
 {
-  type Handler = <Loader as LocalLoader>::Handler;
+  type Handler = <Loader as LocalLoader<Store>>::Handler;
   fn loader() -> &'static std::thread::LocalKey<DataLoader<Self::Handler>> {
     Loader::loader()
   }

@@ -1,4 +1,4 @@
-use crate::{request::LoadCache, task::TaskHandler};
+use crate::{request::RequestCache, task::TaskHandler};
 use async_graphql::Request;
 
 #[doc(hidden)]
@@ -9,7 +9,7 @@ impl CacheFactory {
   where
     T: TaskHandler,
   {
-    CacheFactory(Box::new(|request| request.data(LoadCache::<T>::new())))
+    CacheFactory(Box::new(|request| request.data(RequestCache::<T>::new())))
   }
 
   pub fn insert_loader_cache(&self, request: Request) -> Request {
@@ -34,8 +34,8 @@ macro_rules! register_cache_factory {
   ($handler:ty) => {
     inventory::submit!({ $crate::graphql::CacheFactory::new::<$handler>() });
 
-    impl AsRef<LoadCache<$handler>> for async_graphql::context::Context<'_> {
-      fn as_ref(&self) -> &LoadCache<$handler> {
+    impl AsRef<RequestCache<$handler>> for async_graphql::context::Context<'_> {
+      fn as_ref(&self) -> &RequestCache<$handler> {
         self.data_unchecked()
       }
     }

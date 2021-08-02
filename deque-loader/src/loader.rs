@@ -1,6 +1,6 @@
 use crate::{
   request::{LoadCache, OneshotReceiver, Request, WatchReceiver},
-  task::{Task, TaskHandler},
+  task::{CompletionReceipt, LoadBatch, PendingAssignment, Task, TaskHandler},
   worker::{QueueHandle, WorkerRegistry},
 };
 use crossbeam::deque::Worker;
@@ -47,10 +47,10 @@ where
     rx
   }
 
-  pub fn cached_load_by<Cache: Send + AsRef<LoadCache<T>>>(
+  pub fn cached_load_by<Cache: Send + Sync + AsRef<LoadCache<T::Key, T::Value, T::Error>>>(
     &self,
     key: T::Key,
-    cache: Cache,
+    cache: &Cache,
   ) -> WatchReceiver<T::Value, T::Error> {
     let (rx, req) = cache.as_ref().get_or_create(&key);
 
@@ -67,9 +67,32 @@ where
 
     rx
   }
+
+  pub fn schedule_assignment(
+    &self,
+    task: Task<LoadBatch<T::Key, T::Value, T::Error>>,
+  ) -> Task<CompletionReceipt> {
+    let Task(LoadBatch { requests }) = task;
+
+    let task = Task(PendingAssignment {
+      queue_handle: self.queue_handle,
+      requests,
+    });
+
+    tokio::task::spawn(async move {
+      T::handle_task(task).await;
+    });
+
+    Task::completion_receipt()
+  }
 }
 
-pub trait LocalLoader {
+pub trait StoreType {}
+pub struct CacheStore;
+impl StoreType for CacheStore {}
+pub struct DataStore;
+impl StoreType for DataStore {}
+pub trait LocalLoader<T: StoreType>: Sized + Send + Sync + 'static {
   type Handler: TaskHandler;
   fn loader() -> &'static LocalKey<DataLoader<Self::Handler>>;
 }

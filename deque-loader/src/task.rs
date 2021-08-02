@@ -68,7 +68,7 @@ where
 
       TaskAssignment::LoadBatch(Task::from_requests(requests))
     } else {
-      TaskAssignment::NoAssignment(Task::resolve_receipt())
+      TaskAssignment::NoAssignment(Task::completion_receipt())
     }
   }
 }
@@ -113,12 +113,38 @@ where
       }
     };
 
-    Task::<CompletionReceipt>::resolve_receipt()
+    Task::<CompletionReceipt>::completion_receipt()
+  }
+
+  #[must_use]
+  pub(crate) fn apply_partial_results(
+    self,
+    results: HashMap<K, Arc<V>>,
+  ) -> TaskAssignment<K, V, E> {
+    let Task(LoadBatch { requests }) = self;
+
+    let requests: Vec<Request<K, V, E>> = requests
+      .into_par_iter()
+      .filter_map(|req| {
+        if let Some(value) = results.get(req.key()).cloned() {
+          req.resolve(Ok(Some(value)));
+          None
+        } else {
+          Some(req)
+        }
+      })
+      .collect();
+
+    if requests.len().gt(&0) {
+      TaskAssignment::LoadBatch(Task::from_requests(requests))
+    } else {
+      TaskAssignment::NoAssignment(Task::completion_receipt())
+    }
   }
 }
 
 impl Task<CompletionReceipt> {
-  pub(crate) fn resolve_receipt() -> Self {
+  pub(crate) fn completion_receipt() -> Self {
     Task(CompletionReceipt(PhantomData))
   }
 }

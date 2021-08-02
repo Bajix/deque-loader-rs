@@ -4,14 +4,25 @@ use db::schema::{content, users_content};
 use deque_loader::diesel::{DieselError, DieselHandler, DieselLoader};
 use diesel::prelude::*;
 use diesel_connection::PooledConnection;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(SimpleObject, Identifiable, Queryable, Associations, Clone, Loadable)]
+#[derive(
+  SimpleObject,
+  Identifiable,
+  Queryable,
+  Associations,
+  Clone,
+  Loadable,
+  Serialize,
+  Deserialize,
+  Debug,
+)]
 #[belongs_to(UserId, foreign_key = "user_id")]
 #[belongs_to(User, foreign_key = "user_id")]
 #[table_name = "users_content"]
 #[primary_key("user_id")]
-#[data_loader(handler = "DieselHandler<BookmarkLoader>")]
+#[cached_loader(handler = "DieselHandler<BookmarkLoader>")]
 pub struct Bookmark {
   pub user_id: i32,
   #[diesel(embed)]
@@ -19,7 +30,7 @@ pub struct Bookmark {
 }
 
 #[derive(Loader)]
-#[data_loader(handler = "DieselHandler<BookmarkLoader>")]
+#[cached_loader(handler = "DieselHandler<BookmarkLoader>")]
 pub struct BookmarkLoader;
 
 impl DieselLoader for BookmarkLoader {
