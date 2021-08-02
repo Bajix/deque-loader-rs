@@ -42,7 +42,9 @@ mod tests {
     type Key = i32;
     type Value = BatchSize;
     type Error = ();
-    async fn handle_task(task: Task<PendingAssignment<BatchLoader>>) -> Task<CompletionReceipt> {
+    async fn handle_task(
+      task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
+    ) -> Task<CompletionReceipt> {
       match task.get_assignment() {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, Arc<BatchSize>> = HashMap::new();

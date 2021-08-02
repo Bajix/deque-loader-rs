@@ -29,7 +29,9 @@ where
   type Error = SimpleDieselError;
   const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt> {
+  async fn handle_task(
+    task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
+  ) -> Task<CompletionReceipt> {
     tokio::task::spawn_blocking(move || {
       let conn = get_connection();
 

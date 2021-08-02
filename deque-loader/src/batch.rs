@@ -27,7 +27,9 @@ where
   type Error = T::Error;
   const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt> {
+  async fn handle_task(
+    task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
+  ) -> Task<CompletionReceipt> {
     match task.get_assignment() {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();

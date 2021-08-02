@@ -1,4 +1,4 @@
-use crate::{loader::DataLoader, request::Request, task::TaskHandler};
+use crate::{loader::DataLoader, request::Request, task::TaskHandler, Key};
 use atomic_take::AtomicTake;
 use crossbeam::{
   atomic::AtomicCell,
@@ -8,23 +8,25 @@ use itertools::Itertools;
 use num::Integer;
 use rayon::prelude::*;
 use std::iter;
-pub struct QueueHandle<T: TaskHandler> {
+pub struct QueueHandle<K: Key, V: Send + Sync + Clone + 'static, E: Send + Sync + Clone + 'static> {
   pub(crate) queue_size: AtomicCell<usize>,
-  stealers: Vec<Stealer<Request<T>>>,
+  stealers: Vec<Stealer<Request<K, V, E>>>,
 }
 
-impl<T> QueueHandle<T>
+impl<K, V, E> QueueHandle<K, V, E>
 where
-  T: TaskHandler,
+  K: Key,
+  V: Send + Sync + Clone + 'static,
+  E: Send + Sync + Clone + 'static,
 {
-  fn new(stealers: Vec<Stealer<Request<T>>>) -> Self {
+  fn new(stealers: Vec<Stealer<Request<K, V, E>>>) -> Self {
     QueueHandle {
       queue_size: AtomicCell::new(0),
       stealers,
     }
   }
 
-  fn collect_tasks(&self) -> Vec<Request<T>> {
+  fn collect_tasks(&self) -> Vec<Request<K, V, E>> {
     self
       .stealers
       .par_iter()
@@ -40,7 +42,7 @@ where
       .collect()
   }
 
-  pub(crate) fn drain_queue(&self) -> Vec<Request<T>> {
+  pub(crate) fn drain_queue(&self) -> Vec<Request<K, V, E>> {
     let mut requests = vec![];
 
     while self.queue_size.compare_exchange(requests.len(), 0).is_err() {
@@ -53,8 +55,8 @@ where
 }
 
 pub struct WorkerGroup<T: TaskHandler> {
-  queue_handle: QueueHandle<T>,
-  workers: Vec<AtomicTake<Worker<Request<T>>>>,
+  queue_handle: QueueHandle<T::Key, T::Value, T::Error>,
+  workers: Vec<AtomicTake<Worker<Request<T::Key, T::Value, T::Error>>>>,
 }
 
 impl<T> WorkerGroup<T>

@@ -30,7 +30,9 @@ where
   type Error = ErrorKind;
   const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
 
-  async fn handle_task(task: Task<PendingAssignment<Self>>) -> Task<CompletionReceipt> {
+  async fn handle_task(
+    task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
+  ) -> Task<CompletionReceipt> {
     let conn = get_connection_manager().await;
 
     match task.get_assignment() {

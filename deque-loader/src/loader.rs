@@ -8,15 +8,18 @@ use std::thread::LocalKey;
 
 /// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
 pub struct DataLoader<T: TaskHandler> {
-  queue: Worker<Request<T>>,
-  queue_handle: &'static QueueHandle<T>,
+  queue: Worker<Request<T::Key, T::Value, T::Error>>,
+  queue_handle: &'static QueueHandle<T::Key, T::Value, T::Error>,
 }
 
 impl<T> DataLoader<T>
 where
   T: TaskHandler,
 {
-  pub fn new(queue: Worker<Request<T>>, queue_handle: &'static QueueHandle<T>) -> Self {
+  pub fn new(
+    queue: Worker<Request<T::Key, T::Value, T::Error>>,
+    queue_handle: &'static QueueHandle<T::Key, T::Value, T::Error>,
+  ) -> Self {
     DataLoader {
       queue,
       queue_handle,
@@ -29,8 +32,8 @@ where
       .expect("There can only be at most one thread local DataLoader per CPU core")
   }
 
-  pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T> {
-    let (req, rx) = Request::<T>::new_oneshot(key);
+  pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T::Value, T::Error> {
+    let (req, rx) = Request::new_oneshot(key);
 
     if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
       let task = Task::new(self.queue_handle);
@@ -48,7 +51,7 @@ where
     &self,
     key: T::Key,
     cache: Cache,
-  ) -> WatchReceiver<T> {
+  ) -> WatchReceiver<T::Value, T::Error> {
     let (rx, req) = cache.as_ref().get_or_create(&key);
 
     if let Some(req) = req {
