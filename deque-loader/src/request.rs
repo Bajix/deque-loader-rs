@@ -144,43 +144,16 @@ where
     *value = Some(cache_cb);
   }
 }
-
-pub struct RequestCache<T>(LoadCache<T::Key, T::Value, T::Error>)
-where
-  T: TaskHandler;
-
-impl<T> AsRef<LoadCache<T::Key, T::Value, T::Error>> for RequestCache<T>
+pub struct LoadCache<T>
 where
   T: TaskHandler,
 {
-  fn as_ref(&self) -> &LoadCache<T::Key, T::Value, T::Error> {
-    &self.0
-  }
+  data: HashMap<T::Key, watch::Receiver<LoadState<T::Value, T::Error>>>,
 }
 
-impl<T> RequestCache<T>
+impl<T> LoadCache<T>
 where
   T: TaskHandler,
-{
-  pub fn new() -> Self {
-    RequestCache(LoadCache::new())
-  }
-}
-
-pub struct LoadCache<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  data: HashMap<K, watch::Receiver<LoadState<V, E>>>,
-}
-
-impl<K, V, E> LoadCache<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
 {
   pub fn new() -> Self {
     LoadCache {
@@ -188,7 +161,13 @@ where
     }
   }
 
-  pub(crate) fn get_or_create(&self, key: &K) -> (WatchReceiver<V, E>, Option<Request<K, V, E>>) {
+  pub(crate) fn get_or_create(
+    &self,
+    key: &T::Key,
+  ) -> (
+    WatchReceiver<T::Value, T::Error>,
+    Option<Request<T::Key, T::Value, T::Error>>,
+  ) {
     let guard = self.data.guard();
 
     loop {

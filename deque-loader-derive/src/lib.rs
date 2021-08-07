@@ -66,16 +66,12 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
           rx.recv().await
         }
 
-        async fn cached_load_by<Cache: Send + Sync + AsRef<#crate_name::request::LoadCache<
-          <#handler as #crate_name::task::TaskHandler>::Key,
-          <#handler as #crate_name::task::TaskHandler>::Value,
-          <#handler as #crate_name::task::TaskHandler>::Error
-        >>>(
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<#crate_name::request::LoadCache<#handler>>>(
           key: <#handler as #crate_name::task::TaskHandler>::Key,
-          cache: &Cache
+          request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
           let rx =
-            <#handler as #crate_name::loader::LocalLoader<#crate_name::loader::DataStore>>::loader().with(|loader| loader.cached_load_by(key, cache));
+            <#handler as #crate_name::loader::LocalLoader<#crate_name::loader::DataStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
 
           rx.recv().await
         }
@@ -97,16 +93,12 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
           rx.recv().await
         }
 
-        async fn cached_load_by<Cache: Send + Sync + AsRef<#crate_name::request::LoadCache<
-          <#cached_handler as #crate_name::task::TaskHandler>::Key,
-          <#cached_handler as #crate_name::task::TaskHandler>::Value,
-          <#cached_handler as #crate_name::task::TaskHandler>::Error
-        >>>(
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<#crate_name::request::LoadCache<#cached_handler>>>(
           key: <#cached_handler as #crate_name::task::TaskHandler>::Key,
-          cache: &Cache
+          request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#cached_handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
           let rx =
-            <#cached_handler as #crate_name::loader::LocalLoader<#crate_name::loader::CacheStore>>::loader().with(|loader| loader.cached_load_by(key, cache));
+            <#cached_handler as #crate_name::loader::LocalLoader<#crate_name::loader::CacheStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
 
           rx.recv().await
         }
