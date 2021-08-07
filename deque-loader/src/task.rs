@@ -1,7 +1,12 @@
 use crate::{key::Key, request::Request, worker::QueueHandle};
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  marker::PhantomData,
+  sync::Arc,
+};
+use tokio::runtime::Handle;
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
 #[async_trait::async_trait]
@@ -10,6 +15,7 @@ pub trait TaskHandler: Sized + Send + Sync + 'static {
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
   const CORES_PER_WORKER_GROUP: usize = 4;
+  const MAX_BATCH_SIZE: Option<usize> = None;
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt>;
@@ -21,6 +27,7 @@ pub struct PendingAssignment<
   V: Send + Sync + Clone + 'static,
   E: Send + Sync + Clone + 'static,
 > {
+  pub(crate) runtime_handle: Handle,
   pub(crate) queue_handle: &'static QueueHandle<K, V, E>,
   pub(crate) requests: Vec<Request<K, V, E>>,
 }
@@ -49,26 +56,78 @@ where
   E: Send + Sync + Clone + 'static,
 {
   #[must_use]
-  pub(crate) fn new(queue_handle: &'static QueueHandle<K, V, E>) -> Self {
+  pub(crate) fn new(queue_handle: &'static QueueHandle<K, V, E>, runtime_handle: Handle) -> Self {
     let requests = vec![];
     Task(PendingAssignment {
+      runtime_handle,
       queue_handle,
       requests,
     })
   }
 
   // Work-steal all pending load tasks
-  pub fn get_assignment(self) -> TaskAssignment<K, V, E> {
-    let mut requests = self.0.queue_handle.drain_queue();
+  pub fn get_assignment<T>(self) -> TaskAssignment<K, V, E>
+  where
+    T: TaskHandler,
+    Self: Into<Task<PendingAssignment<T::Key, T::Value, T::Error>>>,
+  {
+    let PendingAssignment {
+      runtime_handle,
+      queue_handle,
+      mut requests,
+    } = self.0;
 
-    requests.extend(self.0.requests);
+    match T::MAX_BATCH_SIZE {
+      Some(max_batch_size) if requests.len().ge(&max_batch_size) => {
+        return TaskAssignment::LoadBatch(Task::from_requests(requests));
+      }
+      _ => {
+        queue_handle.collect_queue(&mut requests);
+      }
+    }
 
-    if requests.len().gt(&0) {
-      requests.par_sort_unstable_by(|a, b| a.key().cmp(b.key()));
+    match T::MAX_BATCH_SIZE {
+      Some(max_batch_size) if requests.len().gt(&max_batch_size) => {
+        let mut buckets: Vec<(HashSet<K>, Vec<Request<K, V, E>>)> = vec![(HashSet::new(), vec![])];
 
-      TaskAssignment::LoadBatch(Task::from_requests(requests))
-    } else {
-      TaskAssignment::NoAssignment(Task::completion_receipt())
+        for req in requests.into_iter() {
+          let bucket = buckets
+            .iter_mut()
+            .find(|(keys, _)| keys.len() < max_batch_size || keys.contains(req.key()));
+
+          if let Some((keys, requests)) = bucket {
+            keys.insert(req.key().to_owned());
+            requests.push(req);
+          } else {
+            let mut bucket = (HashSet::new(), vec![]);
+            bucket.0.insert(req.key().to_owned());
+            bucket.1.push(req);
+            buckets.push(bucket);
+          }
+        }
+
+        let mut iter = buckets.into_iter();
+
+        let (_, requests) = iter.next().unwrap();
+
+        let assignment = TaskAssignment::LoadBatch(Task::from_requests(requests));
+
+        for (_, requests) in iter {
+          let task = Task(PendingAssignment {
+            runtime_handle: runtime_handle.clone(),
+            queue_handle,
+            requests,
+          });
+
+          runtime_handle.spawn(async move {
+            T::handle_task(task.into()).await;
+          });
+        }
+
+        assignment
+      }
+      _ if requests.len().eq(&0) => TaskAssignment::NoAssignment(Task::completion_receipt()),
+      _ => TaskAssignment::LoadBatch(Task::from_requests(requests)),
     }
   }
 }
@@ -79,7 +138,9 @@ where
   V: Send + Sync + Clone + 'static,
   E: Send + Sync + Clone + 'static,
 {
-  pub(crate) fn from_requests(requests: Vec<Request<K, V, E>>) -> Self {
+  pub(crate) fn from_requests(mut requests: Vec<Request<K, V, E>>) -> Self {
+    requests.par_sort_unstable_by(|a, b| a.key().cmp(b.key()));
+
     Task(LoadBatch { requests })
   }
 

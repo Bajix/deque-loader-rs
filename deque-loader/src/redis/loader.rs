@@ -13,6 +13,8 @@ pub trait RedisLoader: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   const CORES_PER_WORKER_GROUP: usize = 4;
+  const MAX_BATCH_SIZE: Option<usize> = None;
+
   async fn load(
     conn: ConnectionManager,
     keys: Vec<Self::Key>,
@@ -29,13 +31,14 @@ where
   type Value = T::Value;
   type Error = ErrorKind;
   const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
+  const MAX_BATCH_SIZE: Option<usize> = T::MAX_BATCH_SIZE;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
     let conn = get_connection_manager().await;
 
-    match task.get_assignment() {
+    match task.get_assignment::<Self>() {
       TaskAssignment::LoadBatch(task) => match conn {
         Ok(conn) => {
           let keys = task.keys();

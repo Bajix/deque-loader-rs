@@ -66,13 +66,14 @@ where
   type Error = <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Error;
   const CORES_PER_WORKER_GROUP: usize =
     <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::CORES_PER_WORKER_GROUP;
+  const MAX_BATCH_SIZE: Option<usize> = None;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
     let conn = get_connection_manager().await;
 
-    match task.get_assignment() {
+    match task.get_assignment::<Self>() {
       TaskAssignment::LoadBatch(task) => match conn {
         Ok(conn) => {
           let keys = task.keys();

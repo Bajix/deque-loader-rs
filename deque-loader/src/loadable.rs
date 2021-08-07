@@ -45,7 +45,7 @@ mod tests {
     async fn handle_task(
       task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
     ) -> Task<CompletionReceipt> {
-      match task.get_assignment() {
+      match task.get_assignment::<Self>() {
         TaskAssignment::LoadBatch(task) => {
           let mut data: HashMap<i32, Arc<BatchSize>> = HashMap::new();
           let keys = task.keys();

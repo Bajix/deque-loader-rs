@@ -42,9 +42,7 @@ where
       .collect()
   }
 
-  pub(crate) fn drain_queue(&self) -> Vec<Request<K, V, E>> {
-    let mut requests = vec![];
-
+  pub(crate) fn collect_queue(&self, requests: &mut Vec<Request<K, V, E>>) {
     loop {
       let batch = self.collect_tasks();
       let batch_len = batch.len();
@@ -52,7 +50,7 @@ where
       requests.extend(batch.into_iter());
 
       if self.queue_size.fetch_sub(batch_len).le(&batch_len) {
-        break requests;
+        break;
       }
     }
   }

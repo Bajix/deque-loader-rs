@@ -5,6 +5,7 @@ use crate::{
 };
 use crossbeam::deque::Worker;
 use std::thread::LocalKey;
+use tokio::runtime::Handle;
 
 /// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
 pub struct DataLoader<T: TaskHandler> {
@@ -36,7 +37,7 @@ where
     let (req, rx) = Request::new_oneshot(key);
 
     if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-      let task = Task::new(self.queue_handle);
+      let task = Task::new(self.queue_handle, Handle::current());
       tokio::task::spawn(async move {
         T::handle_task(task).await;
       });
@@ -56,7 +57,7 @@ where
 
     if let Some(req) = req {
       if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-        let task = Task::new(self.queue_handle);
+        let task = Task::new(self.queue_handle, Handle::current());
         tokio::task::spawn(async move {
           T::handle_task(task).await;
         });
@@ -75,6 +76,7 @@ where
     let Task(LoadBatch { requests }) = task;
 
     let task = Task(PendingAssignment {
+      runtime_handle: Handle::current(),
       queue_handle: self.queue_handle,
       requests,
     });
