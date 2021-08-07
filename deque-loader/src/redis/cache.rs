@@ -21,14 +21,14 @@ where
   E: Send + Sync + Clone + 'static,
 {
   pub(crate) fn update_cache_on_load(&mut self) {
+    let runtime_handle = Handle::current();
+
+    let cache_cb: Arc<(dyn Fn(&K, &V) + Send + Sync + 'static)> = Arc::new(move |k, v| {
+      infallibly_update_cache(&runtime_handle, k, v);
+    });
+
     self.0.requests.iter_mut().for_each(|req| {
-      let runtime_handle = Handle::current();
-
-      let cache_cb: Box<(dyn FnOnce(&K, &V) + Send + Sync + 'static)> = Box::new(|k, v| {
-        infallibly_update_cache(runtime_handle, k, v);
-      });
-
-      req.set_cache_cb(cache_cb);
+      req.set_cache_cb(cache_cb.clone());
     });
   }
 }
@@ -191,7 +191,7 @@ where
 }
 
 /// Update cache if able or fail silently
-pub fn infallibly_update_cache<K, V>(runtime_handle: Handle, key: &K, value: &V)
+pub fn infallibly_update_cache<K, V>(runtime_handle: &Handle, key: &K, value: &V)
 where
   K: Key + CacheKey<V>,
   V: Send + Sync + Clone + 'static + Serialize,

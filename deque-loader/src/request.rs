@@ -67,12 +67,12 @@ pub enum Request<K: Key, V: Send + Sync + Clone + 'static, E: Send + Sync + Clon
   Watch {
     key: K,
     tx: watch::Sender<LoadState<V, E>>,
-    cache_cb: Option<Box<dyn FnOnce(&K, &V) + Send + Sync>>,
+    cache_cb: Option<Arc<dyn Fn(&K, &V) + Send + Sync>>,
   },
   Oneshot {
     key: K,
     tx: oneshot::Sender<Result<Option<Arc<V>>, E>>,
-    cache_cb: Option<Box<dyn FnOnce(&K, &V) + Send + Sync>>,
+    cache_cb: Option<Arc<dyn Fn(&K, &V) + Send + Sync>>,
   },
 }
 
@@ -135,7 +135,7 @@ where
     };
   }
 
-  pub(crate) fn set_cache_cb(&mut self, cache_cb: Box<dyn FnOnce(&K, &V) + Send + Sync>) {
+  pub(crate) fn set_cache_cb(&mut self, cache_cb: Arc<dyn Fn(&K, &V) + Send + Sync>) {
     let value = match self {
       Request::Watch { cache_cb, .. } => cache_cb,
       Request::Oneshot { cache_cb, .. } => cache_cb,
