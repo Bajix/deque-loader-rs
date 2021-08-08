@@ -46,7 +46,7 @@ where
     format!("{}::{{{:?}}}", value_type_name, self)
   }
 }
-pub struct CacheHandler<T>(T)
+pub struct RedisCacheAdapter<T>(T)
 where
   T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
@@ -54,7 +54,7 @@ where
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned;
 
 #[async_trait::async_trait]
-impl<T> TaskHandler for CacheHandler<T>
+impl<T> TaskHandler for RedisCacheAdapter<T>
 where
   T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
@@ -78,7 +78,7 @@ where
         Ok(conn) => {
           let keys = task.keys();
 
-          match CacheHandler::<T>::load(conn, keys).await {
+          match RedisCacheAdapter::<T>::load(conn, keys).await {
             Ok(results) => match task.apply_partial_results(results) {
               TaskAssignment::LoadBatch(mut task) => {
                 task.update_cache_on_load();
@@ -112,7 +112,7 @@ where
   }
 }
 
-impl<T> CacheHandler<T>
+impl<T> RedisCacheAdapter<T>
 where
   T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
@@ -165,7 +165,7 @@ where
   }
 }
 
-impl<T> LocalLoader<CacheStore> for CacheHandler<T>
+impl<T> LocalLoader<CacheStore> for RedisCacheAdapter<T>
 where
   T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
@@ -178,7 +178,7 @@ where
   }
 }
 
-impl<T> LocalLoader<DataStore> for CacheHandler<T>
+impl<T> LocalLoader<DataStore> for RedisCacheAdapter<T>
 where
   T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:

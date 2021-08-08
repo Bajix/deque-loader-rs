@@ -38,7 +38,7 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .iter()
     .map(|handler| {
       quote! {
-        deque_loader::redis::CacheHandler<#handler>
+        deque_loader::redis::RedisCacheAdapter<#handler>
       }
     })
     .collect();
@@ -123,7 +123,7 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .iter()
     .map(|handler| {
       quote! {
-        deque_loader::redis::CacheHandler<#handler>
+        deque_loader::redis::RedisCacheAdapter<#handler>
       }
     })
     .collect();
