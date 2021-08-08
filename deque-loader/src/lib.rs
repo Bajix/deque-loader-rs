@@ -51,11 +51,12 @@
 
 #![allow(dead_code)]
 #[doc(hidden)]
-#[allow(rustdoc::private_intra_doc_links)]
 pub extern crate async_trait;
 #[doc(hidden)]
 #[cfg(feature = "diesel-loader")]
 pub extern crate diesel_connection;
+#[allow(rustdoc::private_intra_doc_links)]
+extern crate self as deque_loader;
 #[doc(hidden)]
 pub extern crate static_init;
 

@@ -63,11 +63,11 @@ mod tests {
   use tokio::try_join;
 
   #[derive(Loader)]
-  #[data_loader(handler = "BatchHandler<BatchSizeLoader>", internal = true)]
+  #[data_loader(handler = "BatchHandler<BatchSizeLoader>")]
   pub struct BatchSizeLoader {}
 
   #[derive(Clone, Debug, PartialEq, Eq, Loadable)]
-  #[data_loader(handler = "BatchHandler<BatchSizeLoader>", internal = true)]
+  #[data_loader(handler = "BatchHandler<BatchSizeLoader>")]
   pub struct BatchSize(usize);
 
   #[async_trait::async_trait]

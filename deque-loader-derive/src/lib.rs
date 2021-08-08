@@ -2,16 +2,13 @@ extern crate darling;
 extern crate syn;
 
 use darling::FromDeriveInput;
-use proc_macro2::{Span, TokenStream, TokenTree};
-use proc_macro_crate::{crate_name, FoundCrate};
+use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Ident};
+use syn::{parse_macro_input, DeriveInput};
 
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(data_loader))]
 struct LoaderArgs {
-  #[darling(default)]
-  internal: bool,
   #[darling(multiple)]
   handler: Vec<syn::Path>,
 }
@@ -19,8 +16,6 @@ struct LoaderArgs {
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(cached_loader))]
 struct CachedLoaderArgs {
-  #[darling(default)]
-  internal: bool,
   #[darling(multiple)]
   handler: Vec<syn::Path>,
 }
@@ -34,8 +29,6 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let cached_loader_args: CachedLoaderArgs =
     FromDeriveInput::from_derive_input(&input).expect("can't parse cached_loader attribute");
 
-  let internal = loader_args.internal || cached_loader_args.internal;
-  let crate_name = get_crate_name(internal);
   let loadable = &input.ident;
 
   let handler = &loader_args.handler;
@@ -45,33 +38,33 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .iter()
     .map(|handler| {
       quote! {
-        #crate_name::redis::CacheHandler<#handler>
+        deque_loader::redis::CacheHandler<#handler>
       }
     })
     .collect();
 
   let expanded = quote! {
     #(
-      #[#crate_name::async_trait::async_trait]
-      impl #crate_name::loadable::LoadBy<
+      #[deque_loader::async_trait::async_trait]
+      impl deque_loader::loadable::LoadBy<
           #handler,
-          <#handler as #crate_name::task::TaskHandler>::Key,
-          <#handler as #crate_name::task::TaskHandler>::Value,
+          <#handler as deque_loader::task::TaskHandler>::Key,
+          <#handler as deque_loader::task::TaskHandler>::Value,
         > for #loadable
       {
-        type Error = <#handler as #crate_name::task::TaskHandler>::Error;
-        async fn load_by(key: <#handler as #crate_name::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
-          let rx = <#handler as #crate_name::loader::LocalLoader<#crate_name::loader::DataStore>>::loader().with(|loader| loader.load_by(key));
+        type Error = <#handler as deque_loader::task::TaskHandler>::Error;
+        async fn load_by(key: <#handler as deque_loader::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
+          let rx = <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader().with(|loader| loader.load_by(key));
 
           rx.recv().await
         }
 
-        async fn cached_load_by<RequestCache: Send + Sync + AsRef<#crate_name::request::LoadCache<#handler>>>(
-          key: <#handler as #crate_name::task::TaskHandler>::Key,
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::LoadCache<#handler>>>(
+          key: <#handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
-        ) -> Result<Option<std::sync::Arc<<#handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
+        ) -> Result<Option<std::sync::Arc<<#handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
           let rx =
-            <#handler as #crate_name::loader::LocalLoader<#crate_name::loader::DataStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
+            <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
 
           rx.recv().await
         }
@@ -79,26 +72,26 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     )
     *
     #(
-      #[#crate_name::async_trait::async_trait]
-      impl #crate_name::loadable::LoadBy<
+      #[deque_loader::async_trait::async_trait]
+      impl deque_loader::loadable::LoadBy<
           #cached_handler,
-          <#cached_handler as #crate_name::task::TaskHandler>::Key,
-          <#cached_handler as #crate_name::task::TaskHandler>::Value,
+          <#cached_handler as deque_loader::task::TaskHandler>::Key,
+          <#cached_handler as deque_loader::task::TaskHandler>::Value,
         > for #loadable
       {
-        type Error = <#cached_handler as #crate_name::task::TaskHandler>::Error;
-        async fn load_by(key: <#cached_handler as #crate_name::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#cached_handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
-          let rx = <#cached_handler as #crate_name::loader::LocalLoader<#crate_name::loader::CacheStore>>::loader().with(|loader| loader.load_by(key));
+        type Error = <#cached_handler as deque_loader::task::TaskHandler>::Error;
+        async fn load_by(key: <#cached_handler as deque_loader::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#cached_handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
+          let rx = <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader().with(|loader| loader.load_by(key));
 
           rx.recv().await
         }
 
-        async fn cached_load_by<RequestCache: Send + Sync + AsRef<#crate_name::request::LoadCache<#cached_handler>>>(
-          key: <#cached_handler as #crate_name::task::TaskHandler>::Key,
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::LoadCache<#cached_handler>>>(
+          key: <#cached_handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
-        ) -> Result<Option<std::sync::Arc<<#cached_handler as #crate_name::task::TaskHandler>::Value>>, Self::Error> {
+        ) -> Result<Option<std::sync::Arc<<#cached_handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
           let rx =
-            <#cached_handler as #crate_name::loader::LocalLoader<#crate_name::loader::CacheStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
+            <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
 
           rx.recv().await
         }
@@ -119,9 +112,6 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let cached_loader_args: CachedLoaderArgs =
     FromDeriveInput::from_derive_input(&input).expect("can't parse cached_loader attribute");
 
-  let internal = loader_args.internal || cached_loader_args.internal;
-  let crate_name = get_crate_name(internal);
-
   let handler: Vec<&syn::Path> = loader_args
     .handler
     .iter()
@@ -133,7 +123,7 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .iter()
     .map(|handler| {
       quote! {
-        #crate_name::redis::CacheHandler<#handler>
+        deque_loader::redis::CacheHandler<#handler>
       }
     })
     .collect();
@@ -142,14 +132,14 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
   let expanded = quote! {
     #(
-      impl #crate_name::loader::LocalLoader<#crate_name::loader::DataStore> for #loader {
+      impl deque_loader::loader::LocalLoader<deque_loader::loader::DataStore> for #loader {
         type Handler = #handler;
-        fn loader() -> &'static std::thread::LocalKey<#crate_name::loader::DataLoader<Self::Handler>> {
+        fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
           #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: #crate_name::worker::WorkerRegistry<#handler> = #crate_name::worker::WorkerRegistry::new();
+          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#handler> = deque_loader::worker::WorkerRegistry::new();
 
           thread_local! {
-            static DATA_LOADER: #crate_name::loader::DataLoader<#handler> = #crate_name::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
           }
 
           &DATA_LOADER
@@ -158,14 +148,14 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     )
     *
     #(
-      impl #crate_name::loader::LocalLoader<#crate_name::loader::CacheStore> for #loader {
+      impl deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore> for #loader {
         type Handler = #cached_handler;
-        fn loader() -> &'static std::thread::LocalKey<#crate_name::loader::DataLoader<Self::Handler>> {
+        fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
           #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: #crate_name::worker::WorkerRegistry<#cached_handler> = #crate_name::worker::WorkerRegistry::new();
+          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#cached_handler> = deque_loader::worker::WorkerRegistry::new();
 
           thread_local! {
-            static DATA_LOADER: #crate_name::loader::DataLoader<#cached_handler> = #crate_name::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#cached_handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
           }
 
           &DATA_LOADER
@@ -176,16 +166,4 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   };
 
   proc_macro::TokenStream::from(expanded)
-}
-
-fn get_crate_name(internal: bool) -> TokenStream {
-  if internal {
-    quote! { crate }
-  } else {
-    let name = match crate_name("deque-loader") {
-      Ok(FoundCrate::Name(name)) => name,
-      Ok(FoundCrate::Itself) | Err(_) => "deque_loader".to_string(),
-    };
-    TokenTree::from(Ident::new(&name, Span::call_site())).into()
-  }
 }
