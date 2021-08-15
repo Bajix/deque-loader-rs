@@ -22,7 +22,7 @@ use std::{collections::HashMap, sync::Arc};
 #[belongs_to(User, foreign_key = "user_id")]
 #[table_name = "users_content"]
 #[primary_key("user_id")]
-#[cached_loader(handler = "DieselHandler<BookmarkLoader>")]
+#[data_loader(handler = "DieselHandler<BookmarkLoader>", cached = true)]
 pub struct Bookmark {
   pub user_id: i32,
   #[diesel(embed)]
@@ -30,7 +30,7 @@ pub struct Bookmark {
 }
 
 #[derive(Loader)]
-#[cached_loader(handler = "DieselHandler<BookmarkLoader>")]
+#[data_loader(handler = "DieselHandler<BookmarkLoader>", cached = true)]
 pub struct BookmarkLoader;
 
 impl DieselLoader for BookmarkLoader {

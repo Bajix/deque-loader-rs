@@ -1,44 +1,79 @@
 extern crate darling;
 extern crate syn;
 
-use darling::FromDeriveInput;
+use darling::FromMeta;
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use std::vec;
+use syn::{parse_macro_input, Attribute, DeriveInput};
 
-#[derive(Debug, FromDeriveInput)]
-#[darling(attributes(data_loader))]
-struct LoaderArgs {
-  #[darling(multiple)]
-  handler: Vec<syn::Path>,
+#[derive(FromMeta)]
+struct DataLoaderAttr {
+  handler: syn::Path,
+  #[darling(default)]
+  cached: bool,
 }
 
-#[derive(Debug, FromDeriveInput)]
-#[darling(attributes(cached_loader))]
-struct CachedLoaderArgs {
-  #[darling(multiple)]
-  handler: Vec<syn::Path>,
+fn parse_data_loaders(attrs: &[Attribute]) -> darling::Result<Vec<DataLoaderAttr>> {
+  let loader_iter = attrs
+    .iter()
+    .filter(|attr| attr.path.is_ident("data_loader"))
+    .map(|attr| {
+      let meta = darling::util::parse_attribute_to_meta_list(attr)?;
+      let items: Vec<syn::NestedMeta> = meta.nested.into_iter().collect();
+      let loader = DataLoaderAttr::from_list(items.as_slice())?;
+
+      Ok::<_, darling::Error>(loader)
+    });
+
+  let mut loaders: Vec<DataLoaderAttr> = vec![];
+  let mut errors: Vec<darling::Error> = vec![];
+
+  for result in loader_iter {
+    match result {
+      Ok(loader) => loaders.push(loader),
+      Err(err) => errors.push(err),
+    };
+  }
+
+  if errors.is_empty() {
+    Ok(loaders)
+  } else {
+    Err(darling::Error::multiple(errors))
+  }
 }
 
-#[proc_macro_derive(Loadable, attributes(data_loader, cached_loader))]
+#[proc_macro_derive(Loadable, attributes(data_loader))]
 pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let input = parse_macro_input!(input as DeriveInput);
-
-  let loader_args: LoaderArgs =
-    FromDeriveInput::from_derive_input(&input).expect("can't parse data_loader attribute");
-  let cached_loader_args: CachedLoaderArgs =
-    FromDeriveInput::from_derive_input(&input).expect("can't parse cached_loader attribute");
-
   let loadable = &input.ident;
 
-  let handler = &loader_args.handler;
+  let loaders = match parse_data_loaders(&input.attrs) {
+    Ok(loaders) => loaders,
+    Err(err) => return proc_macro::TokenStream::from(err.write_errors()),
+  };
 
-  let cached_handler: Vec<TokenStream> = cached_loader_args
-    .handler
+  let handler: Vec<&syn::Path> = loaders
     .iter()
-    .map(|handler| {
-      quote! {
-        deque_loader::redis::RedisCacheAdapter<#handler>
+    .filter_map(|loader| {
+      if loader.cached {
+        None
+      } else {
+        Some(&loader.handler)
+      }
+    })
+    .collect();
+
+  let cached_handler: Vec<TokenStream> = loaders
+    .iter()
+    .filter_map(|loader| {
+      let DataLoaderAttr { handler, cached } = loader;
+      if *cached {
+        Some(quote! {
+          deque_loader::redis::RedisCacheAdapter<#handler>
+        })
+      } else {
+        None
       }
     })
     .collect();
@@ -103,32 +138,31 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   proc_macro::TokenStream::from(expanded)
 }
 
-#[proc_macro_derive(Loader, attributes(data_loader, cached_loader))]
+#[proc_macro_derive(Loader, attributes(data_loader))]
 pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let input = parse_macro_input!(input as DeriveInput);
+  let loader = input.ident;
 
-  let loader_args: LoaderArgs =
-    FromDeriveInput::from_derive_input(&input).expect("can't parse data_loader attribute");
-  let cached_loader_args: CachedLoaderArgs =
-    FromDeriveInput::from_derive_input(&input).expect("can't parse cached_loader attribute");
+  let loaders = match parse_data_loaders(&input.attrs) {
+    Ok(loaders) => loaders,
+    Err(err) => return proc_macro::TokenStream::from(err.write_errors()),
+  };
 
-  let handler: Vec<&syn::Path> = loader_args
-    .handler
+  let handler: Vec<&syn::Path> = loaders.iter().map(|loader| &loader.handler).collect();
+
+  let cached_handler: Vec<TokenStream> = loaders
     .iter()
-    .chain(cached_loader_args.handler.iter())
-    .collect();
-
-  let cached_handler: Vec<TokenStream> = cached_loader_args
-    .handler
-    .iter()
-    .map(|handler| {
-      quote! {
-        deque_loader::redis::RedisCacheAdapter<#handler>
+    .filter_map(|loader| {
+      let DataLoaderAttr { handler, cached } = loader;
+      if *cached {
+        Some(quote! {
+          deque_loader::redis::RedisCacheAdapter<#handler>
+        })
+      } else {
+        None
       }
     })
     .collect();
-
-  let loader = input.ident;
 
   let expanded = quote! {
     #(
