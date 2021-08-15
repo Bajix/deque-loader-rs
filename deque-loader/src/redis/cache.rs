@@ -9,10 +9,12 @@ use crossbeam::{
   deque::{Steal, Worker},
 };
 use log::error;
-use redis::{AsyncCommands, RedisResult};
+use redis::{AsyncCommands, Pipeline, RedisResult};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::runtime::Handle;
+
+const REDIS_CACHE_EXPIRATION: usize = 900;
 
 impl<K, V, E> Task<LoadBatch<K, V, E>>
 where
@@ -227,7 +229,13 @@ where
 
             match get_connection_manager().await {
               Ok(mut conn) => {
-                let result: RedisResult<()> = conn.set_multiple(&mset).await;
+                let mut pipeline = Pipeline::new();
+
+                for (key, value) in mset.into_iter() {
+                  pipeline.set_ex(key, value, REDIS_CACHE_EXPIRATION);
+                }
+
+                let result: RedisResult<()> = pipeline.query_async(&mut conn).await;
 
                 if let Err(err) = result {
                   error!("Unable to store {}: {:?}", tynm::type_name::<V>(), err);
