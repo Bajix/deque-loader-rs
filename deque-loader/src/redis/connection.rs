@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 pub use redis::aio::ConnectionManager;
 use redis::{Client, ErrorKind, RedisResult};
 use std::env;
@@ -84,13 +85,11 @@ impl EventualConnection {
   }
 }
 
-/// thread Local multiplexed redis connection wrapped by a connection manager
+/// A lazily initialized managed multiplexed redis connection
 pub async fn get_connection_manager() -> Result<ConnectionManager, ErrorKind> {
-  thread_local! {
-    static EVENTUAL_CONNECTION: EventualConnection = EventualConnection::default();
-  }
+  static EVENTUAL_CONNECTION: Lazy<EventualConnection> = Lazy::new(EventualConnection::default);
 
-  let eventual_connection = EVENTUAL_CONNECTION.with(|manager| manager.clone());
+  let eventual_connection = EVENTUAL_CONNECTION.clone();
 
   eventual_connection.get_connection_manager().await
 }
