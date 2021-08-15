@@ -1,11 +1,11 @@
-use crate::{key::Key, request::Request, worker::QueueHandle};
+use crate::{
+  key::Key,
+  request::{Request, RequestBuckets},
+  worker::QueueHandle,
+};
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::{
-  collections::{HashMap, HashSet},
-  marker::PhantomData,
-  sync::Arc,
-};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 use tokio::runtime::Handle;
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
@@ -88,31 +88,17 @@ where
 
     match T::MAX_BATCH_SIZE {
       Some(max_batch_size) if requests.len().gt(&max_batch_size) => {
-        let mut buckets: Vec<(HashSet<K>, Vec<Request<K, V, E>>)> = vec![(HashSet::new(), vec![])];
+        let mut buckets = RequestBuckets::new(max_batch_size);
 
-        for req in requests.into_iter() {
-          let bucket = buckets
-            .iter_mut()
-            .find(|(keys, _)| keys.len() < max_batch_size || keys.contains(req.key()));
+        buckets.extend(requests.into_iter());
 
-          if let Some((keys, requests)) = bucket {
-            keys.insert(req.key().to_owned());
-            requests.push(req);
-          } else {
-            let mut bucket = (HashSet::new(), vec![]);
-            bucket.0.insert(req.key().to_owned());
-            bucket.1.push(req);
-            buckets.push(bucket);
-          }
-        }
+        let mut buckets_iter = buckets.into_iter();
 
-        let mut iter = buckets.into_iter();
-
-        let (_, requests) = iter.next().unwrap();
+        let requests = buckets_iter.next().unwrap();
 
         let assignment = TaskAssignment::LoadBatch(Task::from_requests(requests));
 
-        for (_, requests) in iter {
+        for requests in buckets_iter {
           let task = Task(PendingAssignment {
             runtime_handle: runtime_handle.clone(),
             queue_handle,
