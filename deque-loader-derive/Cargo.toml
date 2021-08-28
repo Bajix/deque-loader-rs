@@ -12,7 +12,7 @@ repository = "https://github.com/Bajix/deque-loader-rs/"
 darling = "0.13.0"
 proc-macro2 = "1.0.28"
 quote = "1.0.9"
-syn = { version = "1.0.74", features = ["full"] }
+syn = { version = "1.0.75", features = ["full"] }
 
 [lib]
 doctest = false
