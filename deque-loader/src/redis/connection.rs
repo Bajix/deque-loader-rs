@@ -1,83 +1,56 @@
+use super::client::{CLIENT, DATABASE_INDEX};
+use crossbeam::atomic::AtomicCell;
+use futures_util::future::FutureExt;
 use once_cell::sync::Lazy;
-pub use redis::aio::ConnectionManager;
-use redis::{Client, ErrorKind, RedisResult};
-use std::env;
-use tokio::sync::watch;
-
-fn create_client() -> RedisResult<Client> {
-  let redis_url_env = env::var("REDIS_URL_ENV").unwrap_or_else(|_| String::from("REDIS_URL"));
-
-  let database_url = env::var(redis_url_env).unwrap_or_else(|_| {
-    let hostname = {
-      let hostname_env =
-        env::var("REDIS_HOSTNAME_ENV").unwrap_or_else(|_| String::from("REDIS_HOSTNAME"));
-
-      env::var(hostname_env).unwrap_or_else(|_| String::from("127.0.0.1"))
-    };
-
-    let port = {
-      let port_env = env::var("REDIS_PORT_ENV").unwrap_or_else(|_| String::from("REDIS_PORT"));
-
-      env::var(port_env).unwrap_or_else(|_| String::from("6379"))
-    };
-
-    let password_env =
-      env::var("REDIS_PASSWORD_ENV").unwrap_or_else(|_| String::from("REDIS_PASSWORD"));
-
-    if let Ok(password) = env::var(password_env) {
-      format!("redis://default:{}@{}:{}", password, hostname, port)
-    } else {
-      format!("redis://{}:{}", hostname, port)
-    }
-  });
-
-  redis::Client::open(database_url)
-}
+use redis::{
+  aio::{ConnectionLike, MultiplexedConnection},
+  Cmd, ErrorKind, Pipeline, RedisError, RedisFuture, RedisResult, Value,
+};
+use tokio::sync::watch::{self, Receiver, Sender};
 
 #[derive(Clone)]
-enum ManagerState {
-  Initializing,
+enum ConnectionState {
+  Idle,
+  Connecting,
+  ClientError(ErrorKind),
   ConnectionError(ErrorKind),
-  Connected(ConnectionManager),
+  Connected(MultiplexedConnection),
 }
 
+/// A [`TrackedConnection`] is a proxy that wraps a [`watch::Receiver`] broadcast of lifecycle state corresponding to the current underlying singleton [`MultiplexedConnection`] and the succession of replacements thereafter. The current connection is always guaranteed to have Redis server-assisted client side caching enabled with redirection onto the current dedicated invalidation [`redis::aio::PubSub`] connection as for facilitating cluster-wide invalidation of client-side cache. This design allows us to fully utilize a lock-free, eventually consistent, concurrent LRU cache as a highly performant primary in-memory pre-cache while only falling back to Redis as necessary for ensuring eventual consistency and high cache availability. The trade off to be able to make it possible as to have such an LRU cache is that eviction is based off of presence within a fixed-size access log rather than cardinality. As such, irregardles of set size, anything not accessed within the last 1000 (Default) operations will eventually lack strong references and fallback to loading via the current singleton [`MultiplexedConnection`] or the underlying primary datastore loader.
 #[derive(Clone)]
-struct EventualConnection {
-  rx: watch::Receiver<ManagerState>,
+pub struct TrackedConnection {
+  rx: Receiver<ConnectionState>,
 }
 
-impl Default for EventualConnection {
-  fn default() -> Self {
-    let (tx, rx) = watch::channel(ManagerState::Initializing);
-
-    EventualConnection::initialize_connection_manager(tx);
-    EventualConnection { rx }
-  }
-}
-
-impl EventualConnection {
-  fn initialize_connection_manager(tx: watch::Sender<ManagerState>) {
-    tokio::task::spawn(async move {
-      match EventualConnection::create_connection_manager().await {
-        Ok(connection_manager) => tx.send(ManagerState::Connected(connection_manager)),
-        Err(err) => tx.send(ManagerState::ConnectionError(err.kind())),
-      }
-    });
-  }
-
-  async fn create_connection_manager() -> RedisResult<ConnectionManager> {
-    let client = create_client()?;
-    let connection_manager = client.get_tokio_connection_manager().await?;
-
-    Ok(connection_manager)
-  }
-
-  async fn get_connection_manager(mut self) -> Result<ConnectionManager, ErrorKind> {
+impl TrackedConnection {
+  async fn get_multiplexed_connection(&mut self) -> RedisResult<MultiplexedConnection> {
     loop {
       match &*self.rx.borrow() {
-        ManagerState::Initializing => {}
-        ManagerState::ConnectionError(kind) => break Err(*kind),
-        ManagerState::Connected(connection_manager) => break Ok(connection_manager.to_owned()),
+        ConnectionState::Idle => {
+          establish_connection();
+        }
+        ConnectionState::Connecting => {}
+        ConnectionState::ClientError(kind) => {
+          break Err::<MultiplexedConnection, _>(RedisError::from((
+            kind.to_owned(),
+            "Invalid Redis connection URL",
+          )))
+        }
+        ConnectionState::ConnectionError(kind) => {
+          if kind.eq(&ErrorKind::IoError) {
+            establish_connection();
+          }
+          break Err::<MultiplexedConnection, _>(RedisError::from((
+            kind.to_owned(),
+            "Unable to establish Redis connection",
+          )));
+        }
+        ConnectionState::Connected(connection) => {
+          if ESTABLISHING_CONNECTION.load().eq(&false) {
+            break Ok::<_, RedisError>(connection.to_owned());
+          }
+        }
       };
 
       self.rx.changed().await.unwrap();
@@ -85,11 +58,123 @@ impl EventualConnection {
   }
 }
 
-/// A lazily initialized managed multiplexed redis connection
-pub async fn get_connection_manager() -> Result<ConnectionManager, ErrorKind> {
-  static EVENTUAL_CONNECTION: Lazy<EventualConnection> = Lazy::new(EventualConnection::default);
+struct CacheConnectionManager {
+  tx: Sender<ConnectionState>,
+  rx: Receiver<ConnectionState>,
+}
 
-  let eventual_connection = EVENTUAL_CONNECTION.clone();
+impl Default for CacheConnectionManager {
+  fn default() -> Self {
+    let (tx, rx) = watch::channel(ConnectionState::Idle);
+    CacheConnectionManager { tx, rx }
+  }
+}
 
-  eventual_connection.get_connection_manager().await
+impl CacheConnectionManager {
+  fn get_tracked_connection(&self) -> TrackedConnection {
+    let rx = self.rx.clone();
+
+    TrackedConnection { rx }
+  }
+}
+
+static CONNECTION_MANAGER: Lazy<CacheConnectionManager> =
+  Lazy::new(CacheConnectionManager::default);
+
+/// An eventualistic [`MultiplexedConnection`] with Redis-assisted client-side cache invalidation tracking and managed reconnection
+pub fn get_tracked_connection() -> TrackedConnection {
+  CONNECTION_MANAGER.get_tracked_connection()
+}
+
+static ESTABLISHING_CONNECTION: AtomicCell<bool> = AtomicCell::new(false);
+fn establish_connection() {
+  if ESTABLISHING_CONNECTION
+    .compare_exchange(false, true)
+    .is_ok()
+  {
+    tokio::task::spawn(async {
+      match &*CLIENT {
+        Ok(client) => {
+          let conn: RedisResult<MultiplexedConnection> = async {
+            CONNECTION_MANAGER.tx.send(ConnectionState::Connecting).ok();
+
+            let conn = client.get_multiplexed_tokio_connection().await?;
+
+            Ok(conn)
+          }
+          .await;
+
+          match conn {
+            Ok(conn) => {
+              CONNECTION_MANAGER
+                .tx
+                .send(ConnectionState::Connected(conn))
+                .ok();
+            }
+            Err(err) => {
+              CONNECTION_MANAGER
+                .tx
+                .send(ConnectionState::ConnectionError(err.kind()))
+                .ok();
+            }
+          };
+        }
+        Err(err) => {
+          CONNECTION_MANAGER
+            .tx
+            .send(ConnectionState::ClientError(err.kind()))
+            .ok();
+        }
+      };
+
+      ESTABLISHING_CONNECTION.store(false);
+    });
+  }
+}
+
+impl ConnectionLike for TrackedConnection {
+  fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {
+    (async move {
+      let mut conn = self.get_multiplexed_connection().await?;
+
+      match conn.req_packed_command(cmd).await {
+        Ok(result) => Ok(result),
+        Err(err) => {
+          if err.is_connection_dropped() {
+            establish_connection();
+          }
+
+          Err(err)
+        }
+      }
+    })
+    .boxed()
+  }
+
+  fn req_packed_commands<'a>(
+    &'a mut self,
+    cmd: &'a Pipeline,
+    offset: usize,
+    count: usize,
+  ) -> RedisFuture<'a, Vec<Value>> {
+    (async move {
+      let mut conn = self.get_multiplexed_connection().await?;
+
+      match conn.req_packed_commands(cmd, offset, count).await {
+        Ok(result) => Ok(result),
+        Err(err) => {
+          if err.is_connection_dropped() {
+            establish_connection();
+          }
+
+          Err(err)
+        }
+      }
+    })
+    .boxed()
+  }
+
+  fn get_db(&self) -> i64 {
+    DATABASE_INDEX.load()
+  }
 }

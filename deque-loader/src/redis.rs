@@ -1,4 +1,5 @@
 mod cache;
+mod client;
 mod connection;
 mod loader;
 

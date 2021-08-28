@@ -1,4 +1,4 @@
-use super::{get_connection_manager, ConnectionManager};
+use super::{get_tracked_connection, TrackedConnection};
 use crate::{
   key::Key,
   loader::{CacheStore, DataLoader, DataStore, LocalLoader},
@@ -73,42 +73,30 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let conn = get_connection_manager().await;
-
     match task.get_assignment::<Self>() {
-      TaskAssignment::LoadBatch(task) => match conn {
-        Ok(conn) => {
-          let keys = task.keys();
+      TaskAssignment::LoadBatch(task) => {
+        let keys = task.keys();
+        let conn = get_tracked_connection();
 
-          match RedisCacheAdapter::<T>::load(conn, keys).await {
-            Ok(results) => match task.apply_partial_results(results) {
-              TaskAssignment::LoadBatch(mut task) => {
-                task.update_cache_on_load();
-                <T as LocalLoader<DataStore>>::loader()
-                  .with(|loader| loader.schedule_assignment(task))
-              }
-              TaskAssignment::NoAssignment(receipt) => receipt,
-            },
-            Err(err) => {
-              error!(
-                "{} unable to load data from Redis: {:?}",
-                tynm::type_name::<T>(),
-                err
-              );
+        match RedisCacheAdapter::<T>::load(conn, keys).await {
+          Ok(results) => match task.apply_partial_results(results) {
+            TaskAssignment::LoadBatch(mut task) => {
+              task.update_cache_on_load();
               <T as LocalLoader<DataStore>>::loader()
                 .with(|loader| loader.schedule_assignment(task))
             }
+            TaskAssignment::NoAssignment(receipt) => receipt,
+          },
+          Err(err) => {
+            error!(
+              "{} unable to load data from Redis: {:?}",
+              tynm::type_name::<T>(),
+              err
+            );
+            <T as LocalLoader<DataStore>>::loader().with(|loader| loader.schedule_assignment(task))
           }
         }
-        Err(err) => {
-          error!(
-            "{} unable to acquire Redis connection: {:?}",
-            tynm::type_name::<T>(),
-            err
-          );
-          <T as LocalLoader<DataStore>>::loader().with(|loader| loader.schedule_assignment(task))
-        }
-      },
+      }
       TaskAssignment::NoAssignment(receipt) => receipt,
     }
   }
@@ -122,7 +110,7 @@ where
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned,
 {
   async fn load(
-    mut conn: ConnectionManager,
+    mut conn: TrackedConnection,
     keys: Vec<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key>,
   ) -> RedisResult<
     HashMap<
@@ -227,23 +215,18 @@ where
               }
             }
 
-            match get_connection_manager().await {
-              Ok(mut conn) => {
-                let mut pipeline = Pipeline::new();
+            let mut conn = get_tracked_connection();
 
-                for (key, value) in mset.into_iter() {
-                  pipeline.set_ex(key, value, REDIS_CACHE_EXPIRATION);
-                }
+            let mut pipeline = Pipeline::new();
 
-                let result: RedisResult<()> = pipeline.query_async(&mut conn).await;
+            for (key, value) in mset.into_iter() {
+              pipeline.set_ex(key, value, REDIS_CACHE_EXPIRATION);
+            }
 
-                if let Err(err) = result {
-                  error!("Unable to store {}: {:?}", tynm::type_name::<V>(), err);
-                }
-              }
-              Err(err) => {
-                error!("Unable to acquire Redis connection: {:?}", err);
-              }
+            let result: RedisResult<()> = pipeline.query_async(&mut conn).await;
+
+            if let Err(err) = result {
+              error!("Unable to store {}: {:?}", tynm::type_name::<V>(), err);
             }
           });
         }
