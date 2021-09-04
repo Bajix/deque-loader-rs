@@ -23,7 +23,7 @@ num = "0.4.0"
 num_cpus = "1.13.0"
 rayon = "1.5.1"
 static_init = "1.0.1"
-thiserror = "1.0.26"
+thiserror = "1.0.28"
 tokio = { version = "1", features = [
   "rt",
   "sync",
@@ -32,22 +32,22 @@ tokio = { version = "1", features = [
   "parking_lot",
 ] }
 deque-loader-derive = { path = "../deque-loader-derive" }
-redis = { version = "0.21.1", features = [
+redis = { version = "0.21.2", features = [
   "tokio-comp",
   "connection-manager",
 ], optional = true }
 bincode = "1.3.3"
-serde = "1.0.129"
+serde = "1.0.130"
 tynm = "0.1.6"
 once_cell = "1.8.0"
-futures-util = "0.3.16"
+futures-util = "0.3.17"
 url = "2.2.2"
+arc-swap = "1.3.2"
 
 [features]
 default = ["diesel-loader", "redis-loader", "graphql"]
 graphql = ["async-graphql"]
 diesel-loader = ["diesel", "diesel-connection"]
-tracing = ["diesel-connection/tracing"]
 mysql = ["diesel-connection/mysql"]
 postgres = ["diesel-connection/postgres"]
 sqlite = ["diesel-connection/sqlite"]

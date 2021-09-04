@@ -96,8 +96,8 @@ where
   /// Pre-allocate workers for each potential thread local [`DataLoader`]
   pub fn new() -> Self {
     let core_count = num_cpus::get();
-    let group_size = T::CORES_PER_WORKER_GROUP.min(core_count.div_ceil(&2));
-    let group_count = core_count.div_ceil(&group_size);
+    let group_size = T::CORES_PER_WORKER_GROUP.min(Integer::div_ceil(&core_count, &2));
+    let group_count = Integer::div_ceil(&core_count, &group_size);
 
     let claim_counter = AtomicCell::new(0);
 
@@ -123,7 +123,7 @@ where
     let slot = claim_counter.fetch_add(1);
 
     let group_index = slot % group_count;
-    let worker_index = slot.div_floor(&group_count);
+    let worker_index = Integer::div_floor(&slot, &group_count);
 
     let worker_group = worker_groups.get(group_index)?;
     let queue = worker_group.workers.get(worker_index)?.take()?;
