@@ -60,6 +60,9 @@ extern crate self as deque_loader;
 #[doc(hidden)]
 pub extern crate static_init;
 
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 pub use deque_loader_derive::*;
 
 pub mod batch;

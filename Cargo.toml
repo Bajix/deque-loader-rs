@@ -2,8 +2,11 @@
 opt-level = 0
 
 [profile.release]
-lto = true
+lto = "fat"
 opt-level = 3
+codegen-units = 1
+panic = "abort"
+
 
 [workspace]
 members = [
