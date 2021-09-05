@@ -73,7 +73,11 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    match task.get_assignment::<Self>() {
+    let assignment = tokio::task::spawn_blocking(|| task.get_assignment::<Self>())
+      .await
+      .unwrap();
+
+    match assignment {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
         let conn = get_tracked_connection();

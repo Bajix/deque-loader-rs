@@ -36,11 +36,14 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let conn = get_tracked_connection();
+    let assignment = tokio::task::spawn_blocking(|| task.get_assignment::<Self>())
+      .await
+      .unwrap();
 
-    match task.get_assignment::<Self>() {
+    match assignment {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
+        let conn = get_tracked_connection();
         let result = T::load(conn, keys).await.map_err(|err| err.kind());
         task.resolve(result)
       }
