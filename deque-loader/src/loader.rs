@@ -1,5 +1,5 @@
 use crate::{
-  request::{LoadCache, OneshotReceiver, Request, WatchReceiver},
+  request::{ContextCache, OneshotReceiver, Request, WatchReceiver},
   task::{CompletionReceipt, LoadBatch, PendingAssignment, Task, TaskHandler},
   worker::{QueueHandle, WorkerRegistry},
 };
@@ -48,7 +48,7 @@ where
     rx
   }
 
-  pub fn cached_load_by<RequestCache: Send + Sync + AsRef<LoadCache<T>>>(
+  pub fn cached_load_by<RequestCache: Send + Sync + AsRef<ContextCache<T>>>(
     &self,
     key: T::Key,
     request_cache: &RequestCache,

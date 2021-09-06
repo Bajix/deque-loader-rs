@@ -1,4 +1,4 @@
-use crate::{request::LoadCache, task::TaskHandler, Key};
+use crate::{request::ContextCache, task::TaskHandler, Key};
 use std::sync::Arc;
 
 #[async_trait::async_trait]
@@ -13,7 +13,7 @@ where
   /// Load a value by it's key in a batched load. If no [`TaskHandler`] is pending assignment, one will be scheduled. Even though this is scheduled up front, task assignment is deferred and will capture all loads that come thereafter; for a given request, it is guaranteed all loads will be enqueued before task assigment and batched optimally.
   async fn load_by(key: K) -> Result<Option<Arc<V>>, Self::Error>;
   /// Load against a request contextual cache. Use [`register_cache_factory`] and [`crate::graphql::insert_loader_caches`] to hydrate Context<'_> and to define AsRef impl
-  async fn cached_load_by<RequestCache: Send + Sync + AsRef<LoadCache<T>>>(
+  async fn cached_load_by<RequestCache: Send + Sync + AsRef<ContextCache<T>>>(
     key: K,
     request_cache: &RequestCache,
   ) -> Result<Option<Arc<V>>, Self::Error>;

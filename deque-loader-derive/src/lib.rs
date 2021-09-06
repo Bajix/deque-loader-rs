@@ -94,7 +94,7 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
           rx.recv().await
         }
 
-        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::LoadCache<#handler>>>(
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::ContextCache<#handler>>>(
           key: <#handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
@@ -121,7 +121,7 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
           rx.recv().await
         }
 
-        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::LoadCache<#cached_handler>>>(
+        async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::ContextCache<#cached_handler>>>(
           key: <#cached_handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#cached_handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {

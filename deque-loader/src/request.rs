@@ -247,19 +247,19 @@ where
   }
 }
 
-pub struct LoadCache<T>
+pub struct ContextCache<T>
 where
   T: TaskHandler,
 {
   data: HashMap<T::Key, watch::Receiver<LoadState<T::Value, T::Error>>>,
 }
 
-impl<T> LoadCache<T>
+impl<T> ContextCache<T>
 where
   T: TaskHandler,
 {
   pub fn new() -> Self {
-    LoadCache {
+    ContextCache {
       data: HashMap::new(),
     }
   }
