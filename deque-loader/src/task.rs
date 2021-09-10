@@ -145,20 +145,22 @@ where
   pub fn resolve(self, results: Result<HashMap<K, Arc<V>>, E>) -> Task<CompletionReceipt> {
     let Task(LoadBatch { requests }) = self;
 
-    match results {
-      Ok(values) => {
-        requests.into_par_iter().for_each(|req| {
-          let value = values.get(req.key()).cloned();
-          req.resolve(Ok(value));
-        });
-      }
+    rayon::spawn(move || {
+      match results {
+        Ok(values) => {
+          requests.into_par_iter().for_each(|req| {
+            let value = values.get(req.key()).cloned();
+            req.resolve(Ok(value));
+          });
+        }
 
-      Err(e) => {
-        requests
-          .into_par_iter()
-          .for_each(|req| req.resolve(Err(e.clone())));
-      }
-    };
+        Err(e) => {
+          requests
+            .into_par_iter()
+            .for_each(|req| req.resolve(Err(e.clone())));
+        }
+      };
+    });
 
     Task::<CompletionReceipt>::completion_receipt()
   }

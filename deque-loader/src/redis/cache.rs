@@ -12,7 +12,7 @@ use log::error;
 use redis::{AsyncCommands, Pipeline, RedisResult};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, sync::oneshot};
 
 const REDIS_CACHE_EXPIRATION: usize = 900;
 
@@ -200,9 +200,11 @@ where
       QUEUE.with(|(queue, queue_size)| {
         if queue_size.fetch_add(1).eq(&0) {
           let stealer = queue.stealer();
-
           let queue_size = queue_size.to_owned();
-          runtime_handle.spawn(async move {
+
+          let (tx, rx) = oneshot::channel();
+
+          rayon::spawn(move || {
             let mut mset = vec![];
 
             loop {
@@ -218,6 +220,12 @@ where
                 break;
               }
             }
+
+            tx.send(mset).ok();
+          });
+
+          runtime_handle.spawn(async move {
+            let mset = rx.await.unwrap();
 
             let mut conn = get_tracked_connection();
 
