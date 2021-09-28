@@ -3,9 +3,12 @@ use crate::{
   request::{Request, RequestBuckets},
   worker::QueueHandle,
 };
-use itertools::Itertools;
 use rayon::prelude::*;
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  marker::PhantomData,
+  sync::Arc,
+};
 use tokio::runtime::Handle;
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
@@ -124,21 +127,14 @@ where
   V: Send + Sync + Clone + 'static,
   E: Send + Sync + Clone + 'static,
 {
-  pub(crate) fn from_requests(mut requests: Vec<Request<K, V, E>>) -> Self {
-    requests.par_sort_unstable_by(|a, b| a.key().cmp(b.key()));
-
+  pub(crate) fn from_requests(requests: Vec<Request<K, V, E>>) -> Self {
     Task(LoadBatch { requests })
   }
 
   pub fn keys(&self) -> Vec<K> {
-    self
-      .0
-      .requests
-      .iter()
-      .map(|req| req.key())
-      .dedup()
-      .map(|k| k.to_owned())
-      .collect_vec()
+    let keys: HashSet<K> =
+      HashSet::from_par_iter(self.0.requests.par_iter().map(|req| req.key().to_owned()));
+    keys.into_par_iter().collect()
   }
 
   #[must_use]
