@@ -29,8 +29,6 @@ where
   type Key = T::Key;
   type Value = T::Value;
   type Error = SimpleDieselError;
-  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
-  const MAX_BATCH_SIZE: Option<usize> = T::MAX_BATCH_SIZE;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,

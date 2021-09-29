@@ -50,7 +50,7 @@ where
 }
 pub struct RedisCacheAdapter<T>(T)
 where
-  T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
+  T: TaskHandler + LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
     CacheKey<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned;
@@ -58,7 +58,7 @@ where
 #[async_trait::async_trait]
 impl<T> TaskHandler for RedisCacheAdapter<T>
 where
-  T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
+  T: TaskHandler + LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
     CacheKey<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned,
@@ -66,16 +66,11 @@ where
   type Key = <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key;
   type Value = <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value;
   type Error = <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Error;
-  const CORES_PER_WORKER_GROUP: usize =
-    <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::CORES_PER_WORKER_GROUP;
-  const MAX_BATCH_SIZE: Option<usize> = None;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let assignment = tokio::task::spawn_blocking(|| task.get_assignment::<Self>())
-      .await
-      .unwrap();
+    let assignment = task.get_assignment::<Self>();
 
     match assignment {
       TaskAssignment::LoadBatch(task) => {
@@ -86,8 +81,7 @@ where
           Ok(results) => match task.apply_partial_results(results) {
             TaskAssignment::LoadBatch(mut task) => {
               task.update_cache_on_load();
-              <T as LocalLoader<DataStore>>::loader()
-                .with(|loader| loader.schedule_assignment(task))
+              DataLoader::delegate_assignment(<T as LocalLoader<DataStore>>::loader(), task)
             }
             TaskAssignment::NoAssignment(receipt) => receipt,
           },
@@ -97,7 +91,7 @@ where
               tynm::type_name::<T>(),
               err
             );
-            <T as LocalLoader<DataStore>>::loader().with(|loader| loader.schedule_assignment(task))
+            DataLoader::delegate_assignment(<T as LocalLoader<DataStore>>::loader(), task)
           }
         }
       }
@@ -108,7 +102,7 @@ where
 
 impl<T> RedisCacheAdapter<T>
 where
-  T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
+  T: TaskHandler + LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
     CacheKey<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned,
@@ -161,7 +155,7 @@ where
 
 impl<T> LocalLoader<CacheStore> for RedisCacheAdapter<T>
 where
-  T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
+  T: TaskHandler + LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
     CacheKey<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned,
@@ -174,7 +168,7 @@ where
 
 impl<T> LocalLoader<DataStore> for RedisCacheAdapter<T>
 where
-  T: LocalLoader<DataStore> + LocalLoader<CacheStore>,
+  T: TaskHandler + LocalLoader<DataStore> + LocalLoader<CacheStore>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Key:
     CacheKey<<<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value>,
   <<T as LocalLoader<DataStore>>::Handler as TaskHandler>::Value: Serialize + DeserializeOwned,

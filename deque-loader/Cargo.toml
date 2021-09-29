@@ -30,6 +30,7 @@ tokio = { version = "1", features = [
   "time",
   "macros",
   "parking_lot",
+  "rt-multi-thread"
 ] }
 deque-loader-derive = { path = "../deque-loader-derive" }
 redis = { version = "0.21.2", features = [

@@ -89,19 +89,18 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       {
         type Error = <#handler as deque_loader::task::TaskHandler>::Error;
         async fn load_by(key: <#handler as deque_loader::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
-          let rx = <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader().with(|loader| loader.load_by(key));
+          let loader = <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader();
 
-          rx.recv().await
+          deque_loader::loader::DataLoader::load_by(loader, key).await
         }
 
         async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::ContextCache<#handler>>>(
           key: <#handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
-          let rx =
-            <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
+          let loader = <#handler as deque_loader::loader::LocalLoader<deque_loader::loader::DataStore>>::loader();
 
-          rx.recv().await
+          deque_loader::loader::DataLoader::cached_load_by(loader, key, request_cache).await
         }
       }
     )
@@ -116,19 +115,18 @@ pub fn load_by(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       {
         type Error = <#cached_handler as deque_loader::task::TaskHandler>::Error;
         async fn load_by(key: <#cached_handler as deque_loader::task::TaskHandler>::Key) -> Result<Option<std::sync::Arc<<#cached_handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
-          let rx = <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader().with(|loader| loader.load_by(key));
+          let loader = <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader();
 
-          rx.recv().await
+          deque_loader::loader::DataLoader::load_by(loader, key).await
         }
 
         async fn cached_load_by<RequestCache: Send + Sync + AsRef<deque_loader::request::ContextCache<#cached_handler>>>(
           key: <#cached_handler as deque_loader::task::TaskHandler>::Key,
           request_cache: &RequestCache
         ) -> Result<Option<std::sync::Arc<<#cached_handler as deque_loader::task::TaskHandler>::Value>>, Self::Error> {
-          let rx =
-            <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader().with(|loader| loader.cached_load_by(key, request_cache));
+          let loader = <#cached_handler as deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore>>::loader();
 
-          rx.recv().await
+          deque_loader::loader::DataLoader::cached_load_by(loader, key, request_cache).await
         }
       }
     )
@@ -169,11 +167,8 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       impl deque_loader::loader::LocalLoader<deque_loader::loader::DataStore> for #loader {
         type Handler = #handler;
         fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
-          #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#handler> = deque_loader::worker::WorkerRegistry::new();
-
           thread_local! {
-            static DATA_LOADER: deque_loader::loader::DataLoader<#handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#handler> = deque_loader::loader::DataLoader::new();
           }
 
           &DATA_LOADER
@@ -185,11 +180,8 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       impl deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore> for #loader {
         type Handler = #cached_handler;
         fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
-          #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#cached_handler> = deque_loader::worker::WorkerRegistry::new();
-
           thread_local! {
-            static DATA_LOADER: deque_loader::loader::DataLoader<#cached_handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#cached_handler> = deque_loader::loader::DataLoader::new();
           }
 
           &DATA_LOADER

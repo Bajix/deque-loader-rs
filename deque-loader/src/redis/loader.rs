@@ -6,7 +6,6 @@ use crate::{
 };
 use redis::{ErrorKind, RedisError};
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::oneshot;
 
 /// a [`redis`] specific loader interface using thread local multiplexed redis connections
 #[async_trait::async_trait]
@@ -31,22 +30,11 @@ where
   type Key = T::Key;
   type Value = T::Value;
   type Error = ErrorKind;
-  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
-  const MAX_BATCH_SIZE: Option<usize> = T::MAX_BATCH_SIZE;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let (tx, rx) = oneshot::channel();
-
-    rayon::spawn(move || {
-      let assignment = task.get_assignment::<Self>();
-      tx.send(assignment).ok();
-    });
-
-    let assignment = rx.await.unwrap();
-
-    match assignment {
+    match task.get_assignment::<Self>() {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
         let conn = get_tracked_connection();

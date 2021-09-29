@@ -79,8 +79,6 @@ pub mod redis;
 #[doc(hidden)]
 pub mod request;
 pub mod task;
-#[doc(hidden)]
-pub mod worker;
 
 pub use key::Key;
 pub use loadable::LoadBy;

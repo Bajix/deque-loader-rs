@@ -1,15 +1,10 @@
-use crate::{
-  key::Key,
-  request::{Request, RequestBuckets},
-  worker::QueueHandle,
-};
+use crate::{key::Key, request::Request};
 use rayon::prelude::*;
 use std::{
   collections::{HashMap, HashSet},
   marker::PhantomData,
   sync::Arc,
 };
-use tokio::runtime::Handle;
 
 /// A type-state control flow for driving tasks from assignment to completion. As task assignment can be deferred until connection acquisition and likewise loads batched by key, this enables opportunistic batching when connection acquisition becomes a bottleneck and also enables connection yielding as a consequence of work cancellation
 #[async_trait::async_trait]
@@ -17,8 +12,6 @@ pub trait TaskHandler: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
-  const CORES_PER_WORKER_GROUP: usize = 4;
-  const MAX_BATCH_SIZE: Option<usize> = None;
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt>;
@@ -30,8 +23,6 @@ pub struct PendingAssignment<
   V: Send + Sync + Clone + 'static,
   E: Send + Sync + Clone + 'static,
 > {
-  pub(crate) runtime_handle: Handle,
-  pub(crate) queue_handle: &'static QueueHandle<K, V, E>,
   pub(crate) requests: Vec<Request<K, V, E>>,
 }
 
@@ -59,65 +50,16 @@ where
   E: Send + Sync + Clone + 'static,
 {
   #[must_use]
-  pub(crate) fn new(queue_handle: &'static QueueHandle<K, V, E>, runtime_handle: Handle) -> Self {
-    let requests = vec![];
-    Task(PendingAssignment {
-      runtime_handle,
-      queue_handle,
-      requests,
-    })
+  pub(crate) fn new(requests: Vec<Request<K, V, E>>) -> Self {
+    Task(PendingAssignment { requests })
   }
 
-  // Work-steal all pending load tasks
   pub fn get_assignment<T>(self) -> TaskAssignment<K, V, E>
   where
     T: TaskHandler,
     Self: Into<Task<PendingAssignment<T::Key, T::Value, T::Error>>>,
   {
-    let PendingAssignment {
-      runtime_handle,
-      queue_handle,
-      mut requests,
-    } = self.0;
-
-    match T::MAX_BATCH_SIZE {
-      Some(max_batch_size) if requests.len().ge(&max_batch_size) => {
-        return TaskAssignment::LoadBatch(Task::from_requests(requests));
-      }
-      _ => {
-        queue_handle.collect_queue(&mut requests);
-      }
-    }
-
-    match T::MAX_BATCH_SIZE {
-      Some(max_batch_size) if requests.len().gt(&max_batch_size) => {
-        let mut buckets = RequestBuckets::new(max_batch_size);
-
-        buckets.extend(requests.into_iter());
-
-        let mut buckets_iter = buckets.into_iter();
-
-        let requests = buckets_iter.next().unwrap();
-
-        let assignment = TaskAssignment::LoadBatch(Task::from_requests(requests));
-
-        for requests in buckets_iter {
-          let task = Task(PendingAssignment {
-            runtime_handle: runtime_handle.clone(),
-            queue_handle,
-            requests,
-          });
-
-          runtime_handle.spawn(async move {
-            T::handle_task(task.into()).await;
-          });
-        }
-
-        assignment
-      }
-      _ if requests.len().eq(&0) => TaskAssignment::NoAssignment(Task::completion_receipt()),
-      _ => TaskAssignment::LoadBatch(Task::from_requests(requests)),
-    }
+    TaskAssignment::LoadBatch(Task::from_requests(self.0.requests))
   }
 }
 

@@ -4,7 +4,6 @@ use crate::{
   Key,
 };
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::oneshot;
 
 /// Simplified TaskHandler interface
 #[async_trait::async_trait]
@@ -12,8 +11,6 @@ pub trait BatchLoader: Sized + Send + Sync + 'static {
   type Key: Key;
   type Value: Send + Sync + Clone + 'static;
   type Error: Send + Sync + Clone + 'static;
-  const CORES_PER_WORKER_GROUP: usize = 4;
-  const MAX_BATCH_SIZE: Option<usize> = None;
   async fn load(keys: Vec<Self::Key>) -> Result<HashMap<Self::Key, Arc<Self::Value>>, Self::Error>;
 }
 
@@ -27,22 +24,11 @@ where
   type Key = T::Key;
   type Value = T::Value;
   type Error = T::Error;
-  const CORES_PER_WORKER_GROUP: usize = T::CORES_PER_WORKER_GROUP;
-  const MAX_BATCH_SIZE: Option<usize> = T::MAX_BATCH_SIZE;
 
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let (tx, rx) = oneshot::channel();
-
-    rayon::spawn(move || {
-      let assignment = task.get_assignment::<Self>();
-      tx.send(assignment).ok();
-    });
-
-    let assignment = rx.await.unwrap();
-
-    match assignment {
+    match task.get_assignment::<Self>() {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
         let result = T::load(keys).await;
