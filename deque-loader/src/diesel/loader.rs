@@ -35,10 +35,12 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
+    let assignment = task.get_assignment::<Self>().await;
+
     tokio::task::spawn_blocking(move || {
       let conn = get_connection();
 
-      match task.get_assignment::<Self>() {
+      match assignment {
         TaskAssignment::LoadBatch(task) => match conn {
           Ok(conn) => {
             let keys = task.keys();

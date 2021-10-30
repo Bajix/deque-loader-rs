@@ -1,49 +1,32 @@
 use crate::{
   request::{ContextCache, OneshotReceiver, Request, WatchReceiver},
   task::{CompletionReceipt, LoadBatch, PendingAssignment, Task, TaskHandler},
-  worker::{QueueHandle, WorkerRegistry},
 };
-use crossbeam::deque::Worker;
 use std::thread::LocalKey;
-use tokio::runtime::Handle;
+use swap_queue::Worker;
 
-/// Each DataLoader is a thread local owner of a  [`crossbeam::deque::Worker`] deque for a given worker group
+/// Each DataLoader is a thread local owner of a [`swap_queue::Worker`] queue for a given worker group
 pub struct DataLoader<T: TaskHandler> {
   queue: Worker<Request<T::Key, T::Value, T::Error>>,
-  queue_handle: &'static QueueHandle<T::Key, T::Value, T::Error>,
 }
 
 impl<T> DataLoader<T>
 where
   T: TaskHandler,
 {
-  pub fn new(
-    queue: Worker<Request<T::Key, T::Value, T::Error>>,
-    queue_handle: &'static QueueHandle<T::Key, T::Value, T::Error>,
-  ) -> Self {
-    DataLoader {
-      queue,
-      queue_handle,
-    }
-  }
-
-  pub fn from_registry(registry: &'static WorkerRegistry<T>) -> Self {
-    registry
-      .take_loader()
-      .expect("There can only be at most one thread local DataLoader per CPU core")
+  pub fn new(queue: Worker<Request<T::Key, T::Value, T::Error>>) -> Self {
+    DataLoader { queue }
   }
 
   pub fn load_by(&self, key: T::Key) -> OneshotReceiver<T::Value, T::Error> {
     let (req, rx) = Request::new_oneshot(key);
 
-    if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-      let task = Task::new(self.queue_handle, Handle::current());
+    if let Some(stealer) = self.queue.push(req) {
+      let task = Task::new(stealer);
       tokio::task::spawn(async move {
         T::handle_task(task).await;
       });
     }
-
-    self.queue.push(req);
 
     rx
   }
@@ -56,14 +39,12 @@ where
     let (rx, req) = request_cache.as_ref().get_or_create(&key);
 
     if let Some(req) = req {
-      if self.queue_handle.queue_size.fetch_add(1).eq(&0) {
-        let task = Task::new(self.queue_handle, Handle::current());
+      if let Some(stealer) = self.queue.push(req) {
+        let task = Task::new(stealer);
         tokio::task::spawn(async move {
           T::handle_task(task).await;
         });
       }
-
-      self.queue.push(req);
     }
 
     rx
@@ -75,17 +56,34 @@ where
   ) -> Task<CompletionReceipt> {
     let Task(LoadBatch { requests }) = task;
 
-    let task = Task(PendingAssignment {
-      runtime_handle: Handle::current(),
-      queue_handle: self.queue_handle,
-      requests,
-    });
+    let mut requests = requests.into_iter();
 
-    tokio::task::spawn(async move {
-      T::handle_task(task).await;
-    });
+    while let Some(req) = requests.next() {
+      if let Some(stealer) = self.queue.push(req) {
+        let task = Task(PendingAssignment {
+          stealer,
+          requests: requests.collect(),
+        });
+
+        tokio::task::spawn(async move {
+          T::handle_task(task).await;
+        });
+
+        return Task::completion_receipt();
+      }
+    }
 
     Task::completion_receipt()
+  }
+}
+
+impl<T> Default for DataLoader<T>
+where
+  T: TaskHandler,
+{
+  fn default() -> Self {
+    let queue = Worker::new();
+    DataLoader { queue }
   }
 }
 

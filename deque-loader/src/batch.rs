@@ -4,7 +4,6 @@ use crate::{
   Key,
 };
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::oneshot;
 
 /// Simplified TaskHandler interface
 #[async_trait::async_trait]
@@ -33,16 +32,7 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let (tx, rx) = oneshot::channel();
-
-    rayon::spawn(move || {
-      let assignment = task.get_assignment::<Self>();
-      tx.send(assignment).ok();
-    });
-
-    let assignment = rx.await.unwrap();
-
-    match assignment {
+    match task.get_assignment::<Self>().await {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
         let result = T::load(keys).await;

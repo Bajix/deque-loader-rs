@@ -1,6 +1,6 @@
 use crate::{task::TaskHandler, Key};
 use flurry::HashMap;
-use std::{collections::HashSet, sync::Arc, vec::IntoIter};
+use std::sync::Arc;
 use tokio::sync::{oneshot, watch};
 
 pub enum LoadState<V: Send + Sync + Clone + 'static, E: Send + Sync + Clone + 'static> {
@@ -142,108 +142,6 @@ where
     };
 
     *value = Some(cache_cb);
-  }
-}
-
-struct RequestBucket<K: Key, V: Send + Sync + Clone + 'static, E: Send + Sync + Clone + 'static> {
-  keys: HashSet<K>,
-  requests: Vec<Request<K, V, E>>,
-}
-
-impl<K, V, E> Default for RequestBucket<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  fn default() -> Self {
-    let keys = HashSet::new();
-    let requests = vec![];
-    RequestBucket { keys, requests }
-  }
-}
-
-impl<K, V, E> RequestBucket<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  fn insert(&mut self, req: Request<K, V, E>) {
-    self.keys.insert(req.key().to_owned());
-    self.requests.push(req);
-  }
-}
-
-pub(crate) struct RequestBuckets<
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-> {
-  buckets: Vec<RequestBucket<K, V, E>>,
-  bucket_capacity: usize,
-}
-
-impl<K, V, E> RequestBuckets<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  pub(crate) fn new(bucket_capacity: usize) -> Self {
-    RequestBuckets {
-      buckets: vec![],
-      bucket_capacity,
-    }
-  }
-
-  fn insert(&mut self, req: Request<K, V, E>) {
-    let bucket_capacity = self.bucket_capacity;
-
-    if let Some(bucket) = self
-      .buckets
-      .iter_mut()
-      .find(|bucket| bucket.keys.len() < bucket_capacity || bucket.keys.contains(req.key()))
-    {
-      bucket.insert(req);
-    } else {
-      let mut bucket = RequestBucket::default();
-      bucket.insert(req);
-
-      self.buckets.push(bucket);
-    }
-  }
-}
-
-impl<'a, K, V, E> Extend<Request<K, V, E>> for RequestBuckets<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  fn extend<T>(&mut self, iter: T)
-  where
-    T: IntoIterator<Item = Request<K, V, E>>,
-  {
-    for req in iter {
-      self.insert(req);
-    }
-  }
-}
-
-impl<K, V, E> IntoIterator for RequestBuckets<K, V, E>
-where
-  K: Key,
-  V: Send + Sync + Clone + 'static,
-  E: Send + Sync + Clone + 'static,
-{
-  type Item = Vec<Request<K, V, E>>;
-  type IntoIter = IntoIter<Vec<Request<K, V, E>>>;
-  fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-    let buckets: Vec<Vec<Request<K, V, E>>> =
-      self.buckets.into_iter().map(|req| req.requests).collect();
-
-    buckets.into_iter()
   }
 }
 

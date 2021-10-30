@@ -169,11 +169,8 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       impl deque_loader::loader::LocalLoader<deque_loader::loader::DataStore> for #loader {
         type Handler = #handler;
         fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
-          #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#handler> = deque_loader::worker::WorkerRegistry::new();
-
           thread_local! {
-            static DATA_LOADER: deque_loader::loader::DataLoader<#handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#handler> = deque_loader::loader::DataLoader::default();
           }
 
           &DATA_LOADER
@@ -185,11 +182,8 @@ pub fn local_loader(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
       impl deque_loader::loader::LocalLoader<deque_loader::loader::CacheStore> for #loader {
         type Handler = #cached_handler;
         fn loader() -> &'static std::thread::LocalKey<deque_loader::loader::DataLoader<Self::Handler>> {
-          #[static_init::dynamic(0)]
-          static WORKER_REGISTRY: deque_loader::worker::WorkerRegistry<#cached_handler> = deque_loader::worker::WorkerRegistry::new();
-
           thread_local! {
-            static DATA_LOADER: deque_loader::loader::DataLoader<#cached_handler> = deque_loader::loader::DataLoader::from_registry(unsafe { &WORKER_REGISTRY });
+            static DATA_LOADER: deque_loader::loader::DataLoader<#cached_handler> = deque_loader::loader::DataLoader::default();
           }
 
           &DATA_LOADER

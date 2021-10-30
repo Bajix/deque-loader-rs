@@ -4,15 +4,12 @@ use crate::{
   loader::{CacheStore, DataLoader, DataStore, LocalLoader},
   task::{CompletionReceipt, LoadBatch, PendingAssignment, Task, TaskAssignment, TaskHandler},
 };
-use crossbeam::{
-  atomic::AtomicCell,
-  deque::{Steal, Worker},
-};
 use log::error;
 use redis::{AsyncCommands, Pipeline, RedisResult};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
-use tokio::{runtime::Handle, sync::oneshot};
+use swap_queue::Worker;
+use tokio::runtime::Handle;
 
 const REDIS_CACHE_EXPIRATION: usize = 900;
 
@@ -73,11 +70,7 @@ where
   async fn handle_task(
     task: Task<PendingAssignment<Self::Key, Self::Value, Self::Error>>,
   ) -> Task<CompletionReceipt> {
-    let assignment = tokio::task::spawn_blocking(|| task.get_assignment::<Self>())
-      .await
-      .unwrap();
-
-    match assignment {
+    match task.get_assignment::<Self>().await {
       TaskAssignment::LoadBatch(task) => {
         let keys = task.keys();
         let conn = get_tracked_connection();
@@ -192,40 +185,15 @@ where
   V: Send + Sync + Clone + 'static + Serialize,
 {
   thread_local! {
-    static QUEUE: (Worker<(String, Vec<u8>)>, Arc<AtomicCell<usize>>) = (Worker::new_fifo(), Arc::new(AtomicCell::new(0)));
+    static QUEUE: Worker<(String, Vec<u8>)> = Worker::new();
   }
 
   match bincode::serialize(value) {
     Ok(data) => {
-      QUEUE.with(|(queue, queue_size)| {
-        if queue_size.fetch_add(1).eq(&0) {
-          let stealer = queue.stealer();
-          let queue_size = queue_size.to_owned();
-
-          let (tx, rx) = oneshot::channel();
-
-          rayon::spawn(move || {
-            let mut mset = vec![];
-
-            loop {
-              mset.extend(std::iter::from_fn(|| loop {
-                match stealer.steal() {
-                  Steal::Success(set_key_value) => break Some(set_key_value),
-                  Steal::Retry => continue,
-                  Steal::Empty => break None,
-                }
-              }));
-
-              if queue_size.compare_exchange(mset.len(), 0).is_ok() {
-                break;
-              }
-            }
-
-            tx.send(mset).ok();
-          });
-
+      QUEUE.with(|queue| {
+        if let Some(stealer) = queue.push((key.cache_key(), data)) {
           runtime_handle.spawn(async move {
-            let mset = rx.await.unwrap();
+            let mset = stealer.take().await;
 
             let mut conn = get_tracked_connection();
 
@@ -242,8 +210,6 @@ where
             }
           });
         }
-
-        queue.push((key.cache_key(), data));
       });
     }
     Err(err) => {

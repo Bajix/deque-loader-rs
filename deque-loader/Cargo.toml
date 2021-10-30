@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/Bajix/deque-loader-rs/"
 
 [dependencies]
-async-graphql = { version = "2.10.1", optional = true }
+async-graphql = { version = "2.10.8", optional = true }
 async-trait = "0.1.51"
 atomic-take = "1.0.0"
 crossbeam = "0.8.1"
@@ -23,7 +23,7 @@ num = "0.4.0"
 num_cpus = "1.13.0"
 rayon = "1.5.1"
 static_init = "1.0.1"
-thiserror = "1.0.29"
+thiserror = "1.0.30"
 tokio = { version = "1", features = [
   "rt",
   "sync",
@@ -32,7 +32,7 @@ tokio = { version = "1", features = [
   "parking_lot",
 ] }
 deque-loader-derive = { path = "../deque-loader-derive" }
-redis = { version = "0.21.2", features = [
+redis = { version = "0.21.3", features = [
   "tokio-comp",
   "connection-manager",
 ], optional = true }
@@ -43,7 +43,8 @@ once_cell = "1.8.0"
 futures-util = "0.3.17"
 url = "2.2.2"
 arc-swap = "1.4.0"
-jemallocator = "0.3.2"
+swap-queue = "0.0.6"
+
 
 [features]
 default = ["diesel-loader", "redis-loader", "graphql"]
