@@ -170,26 +170,24 @@ enum ConnectionState {
 
 struct ConnectionManager {
   state: ArcSwap<ConnectionState>,
-  invalidator: CacheInvalidator,
+  invalidator: &'static CacheInvalidator,
   notify: Notify,
 }
 
-impl Default for ConnectionManager {
-  fn default() -> Self {
-    ConnectionManager {
-      state: ArcSwap::from(Arc::new(ConnectionState::Idle)),
-      invalidator: CacheInvalidator::default(),
-      notify: Notify::new(),
-    }
-  }
-}
-
 impl ConnectionManager {
-  fn get_tracked_connection(&'static self) -> TrackedConnection {
-    TrackedConnection(self)
+  fn new(invalidator: &'static CacheInvalidator) -> Arc<ConnectionManager> {
+    Arc::new(ConnectionManager {
+      state: ArcSwap::from(Arc::new(ConnectionState::Idle)),
+      invalidator,
+      notify: Notify::new(),
+    })
   }
 
-  async fn get_multiplexed_connection(&'static self) -> RedisResult<Arc<ConnectionState>> {
+  fn get_tracked_connection(self: &Arc<Self>) -> TrackedConnection {
+    TrackedConnection(self.clone())
+  }
+
+  async fn get_multiplexed_connection(self: &Arc<Self>) -> RedisResult<Arc<ConnectionState>> {
     let mut i = 0;
 
     loop {
@@ -197,7 +195,7 @@ impl ConnectionManager {
 
       match state.as_ref() {
         ConnectionState::Idle => {
-          self.establish_connection(&state);
+          self.clone().establish_connection(&state);
         }
         ConnectionState::Connecting => {
           self.notify.notified().await;
@@ -210,7 +208,7 @@ impl ConnectionManager {
         }
         ConnectionState::ConnectionError(kind) => {
           if kind.eq(&ErrorKind::IoError) && i.eq(&0) {
-            self.establish_connection(&state);
+            self.clone().establish_connection(&state);
           } else {
             break Err::<Arc<ConnectionState>, _>(RedisError::from((
               kind.to_owned(),
@@ -225,12 +223,12 @@ impl ConnectionManager {
     }
   }
 
-  fn store_and_notify(&self, state: ConnectionState) {
+  fn store_and_notify(self: &Arc<Self>, state: ConnectionState) {
     self.state.store(Arc::new(state));
     self.notify.notify_waiters();
   }
 
-  fn establish_connection(&'static self, current: &Arc<ConnectionState>) {
+  fn establish_connection(self: Arc<Self>, current: &Arc<ConnectionState>) {
     let prev = self
       .state
       .compare_and_swap(current, Arc::new(ConnectionState::Connecting));
@@ -249,7 +247,7 @@ impl ConnectionManager {
     }
   }
 
-  async fn start_new_connection(&'static self, client: &Client) -> RedisResult<()> {
+  async fn start_new_connection(self: &Arc<Self>, client: &Client) -> RedisResult<()> {
     let (mut conn, client_id) = try_join!(
       client.get_multiplexed_tokio_connection(),
       self.invalidator.client_id()
@@ -281,7 +279,7 @@ impl ConnectionManager {
   }
 }
 
-pub struct TrackedConnection(&'static ConnectionManager);
+pub struct TrackedConnection(Arc<ConnectionManager>);
 
 impl ConnectionLike for TrackedConnection {
   fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {
@@ -297,7 +295,7 @@ impl ConnectionLike for TrackedConnection {
         Ok(result) => Ok(result),
         Err(err) => {
           if err.is_connection_dropped() {
-            self.0.establish_connection(&state);
+            self.0.clone().establish_connection(&state);
           }
 
           Err(err)
@@ -325,7 +323,7 @@ impl ConnectionLike for TrackedConnection {
         Ok(result) => Ok(result),
         Err(err) => {
           if err.is_connection_dropped() {
-            self.0.establish_connection(&state);
+            self.0.clone().establish_connection(&state);
           }
 
           Err(err)
@@ -343,9 +341,13 @@ impl ConnectionLike for TrackedConnection {
 /// An eventualistic [`MultiplexedConnection`] with Redis-assisted client-side cache invalidation tracking and managed reconnection
 pub fn get_tracked_connection() -> TrackedConnection {
   #[static_init::dynamic(0)]
-  static CONNECTION_MANAGER: ConnectionManager = ConnectionManager::default();
+  static INVALIDATOR: CacheInvalidator = CacheInvalidator::default();
 
-  let connection_manager = unsafe { &CONNECTION_MANAGER };
+  thread_local! {
+    static CONNECTION_MANAGER: Arc<ConnectionManager> = ConnectionManager::new(unsafe { &INVALIDATOR });
+  }
 
-  connection_manager.get_tracked_connection()
+  CONNECTION_MANAGER.with(|connection_manager| {
+    connection_manager.get_tracked_connection()
+  })
 }
