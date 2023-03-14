@@ -1,8 +1,7 @@
 use diesel::{
-  r2d2,
+  r2d2::{self, PoolError},
   result::{ConnectionError, DatabaseErrorKind},
 };
-use diesel_connection::PoolError;
 use thiserror::Error;
 
 /// A combination of all [`diesel`] error types as well as the convenience types Forbidden, Unauthorized and NotFound

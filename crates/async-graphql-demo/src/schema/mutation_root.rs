@@ -11,11 +11,11 @@ pub struct MutationRoot;
 impl MutationRoot {
   async fn create_user(&self, _ctx: &Context<'_>, data: CreateUser) -> FieldResult<User> {
     let user: Result<User, SimpleDieselError> = spawn_blocking(|| {
-      let conn = get_connection()?;
+      let mut conn = get_connection()?;
       let user = diesel::insert_into(users::table)
         .values(data)
         .returning((users::id, users::name))
-        .get_result::<User>(&conn)?;
+        .get_result::<User>(&mut conn)?;
 
       Ok(user)
     })
@@ -27,11 +27,11 @@ impl MutationRoot {
 
   async fn create_content(&self, _ctx: &Context<'_>, data: CreateContent) -> FieldResult<Content> {
     let user: Result<Content, SimpleDieselError> = spawn_blocking(|| {
-      let conn = get_connection()?;
+      let mut conn = get_connection()?;
       let user = diesel::insert_into(content::table)
         .values(data)
         .returning((content::id, content::title))
-        .get_result::<Content>(&conn)?;
+        .get_result::<Content>(&mut conn)?;
 
       Ok(user)
     })
@@ -48,7 +48,7 @@ impl MutationRoot {
     content_id: ContentId,
   ) -> FieldResult<Bookmark> {
     let bookmark: Result<Bookmark, SimpleDieselError> = spawn_blocking(move || {
-      let conn = get_connection()?;
+      let mut conn = get_connection()?;
 
       diesel::insert_into(users_content::table)
         .values((
@@ -56,7 +56,7 @@ impl MutationRoot {
           users_content::content_id.eq(content_id),
         ))
         .on_conflict_do_nothing()
-        .execute(&conn)?;
+        .execute(&mut conn)?;
 
       let bookmark = users_content::table
         .filter(
@@ -66,7 +66,7 @@ impl MutationRoot {
         )
         .inner_join(content::table)
         .select((users_content::user_id, content::all_columns))
-        .get_result::<Bookmark>(&conn)?;
+        .get_result::<Bookmark>(&mut conn)?;
 
       Ok(bookmark)
     })
@@ -83,7 +83,7 @@ impl MutationRoot {
     content_id: i32,
   ) -> FieldResult<DeletionReceipt> {
     let receipt: Result<DeletionReceipt, SimpleDieselError> = spawn_blocking(move || {
-      let conn = get_connection()?;
+      let mut conn = get_connection()?;
 
       let id = diesel::delete(
         users_content::table.filter(
@@ -93,7 +93,7 @@ impl MutationRoot {
         ),
       )
       .returning(users_content::content_id)
-      .get_result::<i32>(&conn)?;
+      .get_result::<i32>(&mut conn)?;
 
       Ok(DeletionReceipt { id })
     })

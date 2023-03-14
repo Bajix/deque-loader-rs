@@ -9,8 +9,8 @@ use std::sync::Arc;
 use tokio::{sync::Notify, try_join};
 
 struct InvalidationObserver {
-  invalidate_cache_fn: Box<dyn Fn()>,
-  invalidate_keys_fn: Box<dyn Fn(&[String])>,
+  invalidate_cache_fn: Box<dyn Fn() + Send + Sync>,
+  invalidate_keys_fn: Box<dyn Fn(&[String]) + Send + Sync>,
 }
 
 inventory::collect!(InvalidationObserver);
@@ -79,7 +79,7 @@ impl CacheInvalidator {
         InvalidatorState::Connected { client_id } => break Ok(*client_id),
       }
 
-      i = i + 1;
+      i += 1;
     }
   }
 
@@ -347,7 +347,5 @@ pub fn get_tracked_connection() -> TrackedConnection {
     static CONNECTION_MANAGER: Arc<ConnectionManager> = ConnectionManager::new(unsafe { &INVALIDATOR });
   }
 
-  CONNECTION_MANAGER.with(|connection_manager| {
-    connection_manager.get_tracked_connection()
-  })
+  CONNECTION_MANAGER.with(|connection_manager| connection_manager.get_tracked_connection())
 }

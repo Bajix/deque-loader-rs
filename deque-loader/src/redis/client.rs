@@ -45,7 +45,7 @@ fn get_connection_url() -> String {
 }
 
 fn get_database_index(database_url: &str) -> Option<i64> {
-  let url = Url::parse(&database_url).ok()?;
+  let url = Url::parse(database_url).ok()?;
   let mut segments = url.path_segments()?;
   let database_index: i64 = segments.next()?.parse().ok()?;
 

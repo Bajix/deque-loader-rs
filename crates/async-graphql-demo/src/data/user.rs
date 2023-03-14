@@ -13,16 +13,16 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 #[derive(InputObject, Insertable)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 pub struct CreateUser {
   pub name: String,
 }
 
 derive_id! {
   #[derive(Identifiable)]
-  #[table_name = "users"]
+  #[diesel(table_name = users)]
   #[graphql(name = "UserID")]
-  pub struct UserId( #[column_name = "id"] i32);
+  pub struct UserId( #[diesel(column_name = "id")] i32);
 }
 
 #[derive(
@@ -37,8 +37,8 @@ derive_id! {
   Deserialize,
 )]
 #[graphql(complex)]
-#[belongs_to(UserId, foreign_key = "id")]
-#[table_name = "users"]
+#[diesel(belongs_to(UserId, foreign_key = id))]
+#[diesel(table_name = users)]
 #[data_loader(handler = "DieselHandler<UsersLoader>")]
 #[data_loader(handler = "DieselHandler<UserLoader>")]
 pub struct User {
@@ -65,12 +65,12 @@ impl DieselLoader for UserLoader {
   type Key = UserId;
   type Value = User;
   fn load(
-    conn: PooledConnection,
+    mut conn: PooledConnection,
     keys: Vec<UserId>,
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
     let users: Vec<User> = User::belonging_to(&keys)
       .select(users::all_columns)
-      .load::<User>(&conn)?;
+      .load::<User>(&mut conn)?;
 
     let users = users.into_iter().map(Arc::new);
 
@@ -90,13 +90,13 @@ impl DieselLoader for UsersLoader {
   type Key = ();
   type Value = Vec<User>;
   fn load(
-    conn: PooledConnection,
+    mut conn: PooledConnection,
     _: Vec<()>,
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
     let users = users::table
       .limit(50)
       .select(users::all_columns)
-      .get_results::<User>(&conn)?;
+      .get_results::<User>(&mut conn)?;
 
     let mut data: HashMap<(), Arc<Vec<User>>> = HashMap::new();
 

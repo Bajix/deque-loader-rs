@@ -2,7 +2,7 @@ use crate::{request::ContextCache, task::TaskHandler};
 use async_graphql::{context::Context, Request};
 
 #[doc(hidden)]
-pub struct CacheFactory(Box<dyn Fn(Request) -> Request>);
+pub struct CacheFactory(Box<dyn Fn(Request) -> Request + Send + Sync>);
 
 impl CacheFactory {
   pub fn new<T>() -> Self

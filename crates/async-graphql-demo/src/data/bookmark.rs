@@ -18,10 +18,10 @@ use std::{collections::HashMap, sync::Arc};
   Deserialize,
   Debug,
 )]
-#[belongs_to(UserId, foreign_key = "user_id")]
-#[belongs_to(User, foreign_key = "user_id")]
-#[table_name = "users_content"]
-#[primary_key("user_id")]
+#[diesel(belongs_to(UserId, foreign_key = user_id))]
+#[diesel(belongs_to(User, foreign_key = user_id))]
+#[diesel(table_name = users_content)]
+#[diesel(primary_key(user_id))]
 #[data_loader(handler = "DieselHandler<BookmarkLoader>", cached = true)]
 pub struct Bookmark {
   pub user_id: i32,
@@ -37,13 +37,13 @@ impl DieselLoader for BookmarkLoader {
   type Key = UserId;
   type Value = Vec<Bookmark>;
   fn load(
-    conn: PooledConnection,
+    mut conn: PooledConnection,
     keys: Vec<UserId>,
   ) -> Result<HashMap<Self::Key, Arc<Self::Value>>, DieselError> {
     let bookmarks: Vec<Bookmark> = Bookmark::belonging_to(&keys)
       .inner_join(content::table)
       .select((users_content::user_id, content::all_columns))
-      .load::<Bookmark>(&conn)?;
+      .load::<Bookmark>(&mut conn)?;
 
     let grouped_bookmarks = bookmarks.grouped_by(&keys).into_iter().map(Arc::new);
 

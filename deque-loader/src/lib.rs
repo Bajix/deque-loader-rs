@@ -15,7 +15,7 @@
 //!
 //! #[derive(SimpleObject, Loadable, Identifiable, Associations, Queryable, Debug, Clone)]
 //! #[data_loader(handler = "DieselHandler<UserLoader>")]
-//! #[belongs_to(UserId, foreign_key = "id")]
+//! #[diesel(belongs_to(UserId, foreign_key = "id"))]
 //! #[table_name = "users"]
 //! pub struct User {
 //!   pub id: i32,
@@ -50,12 +50,12 @@
 //! ```
 
 #![allow(dead_code)]
+#![allow(rustdoc::private_intra_doc_links)]
 #[doc(hidden)]
 pub extern crate async_trait;
 #[doc(hidden)]
 #[cfg(feature = "diesel-loader")]
 pub extern crate diesel_connection;
-#[allow(rustdoc::private_intra_doc_links)]
 extern crate self as deque_loader;
 #[doc(hidden)]
 pub extern crate static_init;
